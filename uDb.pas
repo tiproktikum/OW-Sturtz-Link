@@ -171,7 +171,29 @@ begin
 
   FSql.Close;
   FSql.SQL.Text :=
-    'select o.GRORDERID, o.GRO_NAME, t.FOLDERNAME ' +
+    'select o.GRORDERID, o.GRO_NAME, t.FOLDERNAME, ' +
+    '(select count(*) from ( ' +
+    '  select 1 from OPTIMIZED o2 ' +
+    '  join VIRTARTICULES v on v.ARTICULID = o2.ARTICULID ' +
+    '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o2.VIRTARTTYPEID ' +
+    '  where o2.ARTICULID is not null and o2.GRORDID = o.GRORDERID ' +
+    '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
+    '  union all ' +
+    '  select 1 from OPTIMIZED o2 ' +
+    '  join BRUS b on b.BRUSID = o2.BRUSID ' +
+    '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o2.VIRTARTTYPEID ' +
+    '  left join COLORSPART cp on cp.COLORSPARTID = o2.EXTCOLORID ' +
+    '  where o2.BRUSID is not null and cp.COLORSPARTID = -1 ' +
+    '    and o2.GRORDID = o.GRORDERID ' +
+    '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
+    '  union all ' +
+    '  select 1 from OPTIMIZED o2 ' +
+    '  join OPTARTCOLORED oac on oac.COLOREDID = o2.COLOREDID ' +
+    '  join OPTART oa on oa.OA_ID = oac.OA_ID ' +
+    '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o2.VIRTARTTYPEID ' +
+    '  where o2.COLOREDID is not null and o2.GRORDID = o.GRORDERID ' +
+    '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
+    ') x) as ELEM_CNT ' +
     'from GRORDERS o ' +
     'left join TREEFOLDERS t on t.TREEFOLDERID = o.TREEFOLDERID ' +
     'where o.ISOPTIMIZED = 1 ' +
@@ -188,6 +210,7 @@ begin
       Item.FolderName := FSql.FieldByName('FOLDERNAME').AsString
     else
       Item.FolderName := '';
+    Item.ElementCount := FSql.FieldByName('ELEM_CNT').AsInteger;
     SetLength(Items, Count + 1);
     Items[Count] := Item;
     Inc(Count);

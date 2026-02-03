@@ -56,6 +56,8 @@ type
     eFilter: TEdit;
     Label1: TLabel;
     pButtons: TPanel;
+    pSeparator: TPanel;
+    Label2: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure btnBrowseDbClick(Sender: TObject);
@@ -77,7 +79,7 @@ type
     procedure ClearGroupList;
     procedure RefreshGroups;
     procedure ApplyFilter;
-    procedure UpdateGridColumnWidths;
+    procedure InitGridColumnWidths;
     function SelectedGroupRef: TGroupOrderRef;
     function SanitizeFileNameForWindows(const S: string): string;
   public
@@ -98,6 +100,8 @@ begin
   FConfig := TAppConfig.Create;
   FDb := TDbManager.Create;
   LoadConfig;
+  gridGroups.Cells[3, 0] := 'Кол-во эл.';
+  InitGridColumnWidths;
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
@@ -163,26 +167,16 @@ begin
     gridGroups.Cells[0, I + 1] := FFilteredGroups[I].Name;
     gridGroups.Cells[1, I + 1] := FFilteredGroups[I].FolderName;
     gridGroups.Cells[2, I + 1] := IntToStr(FFilteredGroups[I].Id);
+    gridGroups.Cells[3, I + 1] := IntToStr(FFilteredGroups[I].ElementCount);
   end;
 end;
 
-procedure TMainForm.UpdateGridColumnWidths;
-var
-  TotalW, W0, W1, W2: Integer;
+procedure TMainForm.InitGridColumnWidths;
 begin
-  TotalW := gridGroups.ClientWidth;
-  if TotalW < 100 then
-    Exit;
-  W2 := TotalW * 6 div 100;  // ID — ~6%
-  if W2 < 40 then
-    W2 := 40;
-  W1 := TotalW * 34 div 100; // Папка — ~34%
-  W0 := TotalW - W1 - W2;    // Наименование — остаток
-  if W0 < 80 then
-    W0 := 80;
-  gridGroups.ColWidths[0] := W0;
-  gridGroups.ColWidths[1] := W1;
-  gridGroups.ColWidths[2] := W2;
+  gridGroups.ColWidths[0] := 280;  // Наименование группы
+  gridGroups.ColWidths[1] := 142;  // Папка
+  gridGroups.ColWidths[2] := 50;   // ID
+  gridGroups.ColWidths[3] := 120; // Кол-во эл.
 end;
 
 procedure TMainForm.RefreshGroups;
@@ -191,8 +185,9 @@ begin
   gridGroups.Cells[0, 0] := 'Наименование группы';
   gridGroups.Cells[1, 0] := 'Папка';
   gridGroups.Cells[2, 0] := 'ID';
+  gridGroups.Cells[3, 0] := 'Кол-во эл.';
   ApplyFilter;
-  UpdateGridColumnWidths;
+  InitGridColumnWidths;
   Log(Format('Загружено групп: %d', [Length(FAllGroups)]));
 end;
 
@@ -275,7 +270,7 @@ end;
 
 procedure TMainForm.pMainResize(Sender: TObject);
 begin
-  UpdateGridColumnWidths;
+  { ширина колонок таблицы групп фиксирована }
 end;
 
 procedure TMainForm.btnSaveConfigClick(Sender: TObject);

@@ -7,6 +7,7 @@ type
     Id: Integer;
     Name: string;
     FolderName: string;
+    ElementCount: Integer;
   end;
 
   TOptimizedItem = record
