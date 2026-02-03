@@ -317,7 +317,11 @@ begin
   if not System.SysUtils.DirectoryExists(ExportDir) then
     raise Exception.Create('Папка выгрузки не существует.');
 
-  FileName := IncludeTrailingPathDelimiter(ExportDir) + Format('GR_%s_%d.sob', [SanitizeFileNameForWindows(CyrillicToLatin(Group.Name)), Group.Id]);
+  FileName := IncludeTrailingPathDelimiter(ExportDir) + Format('GR%s_ID%d_%s.sob', [
+    SanitizeFileNameForWindows(CyrillicToLatin(Group.Name)),
+    Group.Id,
+    FormatDateTime('yyyy-mm-dd_hh-nn-ss', Now)
+  ]);
 
   OptimizedItems := FDb.GetOptimizedItems(Group.Id);
   OptimizedDetails := FDb.GetOptimizedDetails(Group.Id);
