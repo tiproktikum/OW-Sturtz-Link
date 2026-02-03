@@ -171,10 +171,11 @@ begin
 
   FSql.Close;
   FSql.SQL.Text :=
-    'select GRORDERID, GRO_NAME ' +
-    'from GRORDERS ' +
-    'where ISOPTIMIZED = 1 ' +
-    'order by GRORDERID desc';
+    'select o.GRORDERID, o.GRO_NAME, t.FOLDERNAME ' +
+    'from GRORDERS o ' +
+    'left join TREEFOLDERS t on t.TREEFOLDERID = o.TREEFOLDERID ' +
+    'where o.ISOPTIMIZED = 1 ' +
+    'order by o.GRORDERID desc';
   FSql.ExecQuery;
 
   Count := 0;
@@ -183,6 +184,10 @@ begin
   begin
     Item.Id := FSql.FieldByName('GRORDERID').AsInteger;
     Item.Name := FSql.FieldByName('GRO_NAME').AsString;
+    if not FSql.FieldByName('FOLDERNAME').IsNull then
+      Item.FolderName := FSql.FieldByName('FOLDERNAME').AsString
+    else
+      Item.FolderName := '';
     SetLength(Items, Count + 1);
     Items[Count] := Item;
     Inc(Count);

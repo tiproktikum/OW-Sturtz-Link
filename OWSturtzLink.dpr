@@ -6,6 +6,7 @@ uses
   uConfig in 'uConfig.pas',
   uDb in 'uDb.pas',
   uTypes in 'uTypes.pas',
+  uTranslit in 'uTranslit.pas',
   uSturtzSob in 'uSturtzSob.pas';
 
 {$R *.res}

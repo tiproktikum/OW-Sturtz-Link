@@ -100,6 +100,7 @@
         <DCCReference Include="uConfig.pas"/>
         <DCCReference Include="uDb.pas"/>
         <DCCReference Include="uTypes.pas"/>
+        <DCCReference Include="uTranslit.pas"/>
         <DCCReference Include="uSturtzSob.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>

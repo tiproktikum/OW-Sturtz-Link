@@ -1,10 +1,11 @@
-﻿unit uMainForm;
+unit uMainForm;
 
 interface
 
 uses
   Winapi.Windows,
   Winapi.Messages,
+  Winapi.ShellAPI,
   System.SysUtils,
   System.Variants,
   System.Classes,
@@ -15,9 +16,12 @@ uses
   Vcl.StdCtrls,
   Vcl.ExtCtrls,
   Vcl.FileCtrl,
+  Vcl.Grids,
   uConfig,
   uDb,
-  uTypes;
+  uTypes,
+  uTranslit,
+  Vcl.Imaging.pngimage;
 
 type
   TMainForm = class(TForm)
@@ -38,7 +42,7 @@ type
     edtExportDir: TEdit;
     btnBrowseExportDir: TButton;
     btnSaveConfig: TButton;
-    listGroups: TListBox;
+    gridGroups: TStringGrid;
     btnExport: TButton;
     memoLog: TMemo;
     OpenDialogDb: TOpenDialog;
@@ -48,6 +52,10 @@ type
     Image1: TImage;
     pMain: TPanel;
     lblLog: TLabel;
+    pGrOrders: TPanel;
+    eFilter: TEdit;
+    Label1: TLabel;
+    pButtons: TPanel;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure btnBrowseDbClick(Sender: TObject);
@@ -56,15 +64,22 @@ type
     procedure btnDisconnectClick(Sender: TObject);
     procedure btnSaveConfigClick(Sender: TObject);
     procedure btnExportClick(Sender: TObject);
+    procedure eFilterChange(Sender: TObject);
+    procedure pMainResize(Sender: TObject);
   private
     FConfig: TAppConfig;
     FDb: TDbManager;
+    FAllGroups: TArray<TGroupOrder>;
+    FFilteredGroups: TArray<TGroupOrder>;
     procedure LoadConfig;
     procedure SaveConfig;
     procedure Log(const Msg: string);
     procedure ClearGroupList;
     procedure RefreshGroups;
+    procedure ApplyFilter;
+    procedure UpdateGridColumnWidths;
     function SelectedGroupRef: TGroupOrderRef;
+    function SanitizeFileNameForWindows(const S: string): string;
   public
   end;
 
@@ -120,38 +135,95 @@ begin
 end;
 
 procedure TMainForm.ClearGroupList;
+begin
+  gridGroups.RowCount := 1;
+  FFilteredGroups := nil;
+end;
+
+procedure TMainForm.ApplyFilter;
 var
+  Filter: string;
+  Group: TGroupOrder;
   I: Integer;
 begin
-  for I := 0 to listGroups.Items.Count - 1 do
-    listGroups.Items.Objects[I].Free;
-  listGroups.Clear;
+  ClearGroupList;
+  Filter := Trim(eFilter.Text);
+  SetLength(FFilteredGroups, 0);
+  I := 0;
+  for Group in FAllGroups do
+    if (Filter = '') or (Pos(UpperCase(Filter), UpperCase(Group.Name)) > 0) then
+    begin
+      SetLength(FFilteredGroups, I + 1);
+      FFilteredGroups[I] := Group;
+      Inc(I);
+    end;
+  gridGroups.RowCount := Length(FFilteredGroups) + 1;
+  for I := 0 to High(FFilteredGroups) do
+  begin
+    gridGroups.Cells[0, I + 1] := FFilteredGroups[I].Name;
+    gridGroups.Cells[1, I + 1] := FFilteredGroups[I].FolderName;
+    gridGroups.Cells[2, I + 1] := IntToStr(FFilteredGroups[I].Id);
+  end;
+end;
+
+procedure TMainForm.UpdateGridColumnWidths;
+var
+  TotalW, W0, W1, W2: Integer;
+begin
+  TotalW := gridGroups.ClientWidth;
+  if TotalW < 100 then
+    Exit;
+  W2 := TotalW * 6 div 100;  // ID — ~6%
+  if W2 < 40 then
+    W2 := 40;
+  W1 := TotalW * 34 div 100; // Папка — ~34%
+  W0 := TotalW - W1 - W2;    // Наименование — остаток
+  if W0 < 80 then
+    W0 := 80;
+  gridGroups.ColWidths[0] := W0;
+  gridGroups.ColWidths[1] := W1;
+  gridGroups.ColWidths[2] := W2;
 end;
 
 procedure TMainForm.RefreshGroups;
-var
-  Groups: TArray<TGroupOrder>;
-  Group: TGroupOrder;
-  Ref: TGroupOrderRef;
 begin
-  ClearGroupList;
-  Groups := FDb.GetGroupOrders;
-  for Group in Groups do
-  begin
-    Ref := TGroupOrderRef.Create(Group.Id, Group.Name);
-    listGroups.Items.AddObject(Format('%d - %s', [Group.Id, Group.Name]), Ref);
-  end;
-  Log(Format('Загружено групп: %d', [Length(Groups)]));
+  FAllGroups := FDb.GetGroupOrders;
+  gridGroups.Cells[0, 0] := 'Наименование группы';
+  gridGroups.Cells[1, 0] := 'Папка';
+  gridGroups.Cells[2, 0] := 'ID';
+  ApplyFilter;
+  UpdateGridColumnWidths;
+  Log(Format('Загружено групп: %d', [Length(FAllGroups)]));
 end;
 
 function TMainForm.SelectedGroupRef: TGroupOrderRef;
 var
-  Idx: Integer;
+  Row: Integer;
 begin
-  Idx := listGroups.ItemIndex;
-  if Idx < 0 then
-    Exit(nil);
-  Result := TGroupOrderRef(listGroups.Items.Objects[Idx]);
+  Result := nil;
+  Row := gridGroups.Row;
+  if (Row < 1) or (Row > Length(FFilteredGroups)) then
+    Exit;
+  Result := TGroupOrderRef.Create(FFilteredGroups[Row - 1].Id, FFilteredGroups[Row - 1].Name);
+end;
+
+function TMainForm.SanitizeFileNameForWindows(const S: string): string;
+const
+  InvalidChars = ['\', '/', ':', '*', '?', '"', '<', '>', '|'];
+var
+  I: Integer;
+  C: Char;
+begin
+  Result := '';
+  for I := 1 to Length(S) do
+  begin
+    C := S[I];
+    if not (C in InvalidChars) and (Ord(C) >= 32) then
+      Result := Result + C;
+  end;
+  Result := Trim(Result);
+  if Result = '' then
+    Result := 'Group';
 end;
 
 procedure TMainForm.btnBrowseDbClick(Sender: TObject);
@@ -190,8 +262,20 @@ end;
 procedure TMainForm.btnDisconnectClick(Sender: TObject);
 begin
   ClearGroupList;
+  FAllGroups := nil;
   FDb.Disconnect;
   Log('Отключено от БД.');
+end;
+
+procedure TMainForm.eFilterChange(Sender: TObject);
+begin
+  if Length(FAllGroups) > 0 then
+    ApplyFilter;
+end;
+
+procedure TMainForm.pMainResize(Sender: TObject);
+begin
+  UpdateGridColumnWidths;
 end;
 
 procedure TMainForm.btnSaveConfigClick(Sender: TObject);
@@ -219,14 +303,14 @@ begin
   Group := SelectedGroupRef;
   if Group = nil then
     raise Exception.Create('Сначала выберите группу оптимизации.');
-
+  try
   ExportDir := Trim(edtExportDir.Text);
   if ExportDir = '' then
     raise Exception.Create('Выберите папку выгрузки.');
   if not System.SysUtils.DirectoryExists(ExportDir) then
     raise Exception.Create('Папка выгрузки не существует.');
 
-  FileName := IncludeTrailingPathDelimiter(ExportDir) + Format('GR_%d.sob', [Group.Id]);
+  FileName := IncludeTrailingPathDelimiter(ExportDir) + Format('GR_%s_%d.sob', [SanitizeFileNameForWindows(CyrillicToLatin(Group.Name)), Group.Id]);
 
   OptimizedItems := FDb.GetOptimizedItems(Group.Id);
   OptimizedDetails := FDb.GetOptimizedDetails(Group.Id);
@@ -256,6 +340,10 @@ begin
 
   Log('Выгружено: ' + FileName);
   Log(Format('KS: %d, KT: %d', [Length(OptimizedItems), Length(OptimizedDetails)]));
+  ShellExecute(0, 'explore', PChar(ExportDir), nil, nil, SW_SHOWNORMAL);
+  finally
+    Group.Free;
+  end;
 end;
 
 end.

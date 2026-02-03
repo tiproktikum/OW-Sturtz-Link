@@ -1,4 +1,4 @@
-﻿unit uTypes;
+unit uTypes;
 
 interface
 
@@ -6,6 +6,7 @@ type
   TGroupOrder = record
     Id: Integer;
     Name: string;
+    FolderName: string;
   end;
 
   TOptimizedItem = record

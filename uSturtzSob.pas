@@ -1,11 +1,12 @@
-﻿unit uSturtzSob;
+unit uSturtzSob;
 
 interface
 
 uses
   System.SysUtils,
   System.Classes,
-  uTypes;
+  uTypes,
+  uTranslit;
 
 type
   TSturtzSobBuilder = class
@@ -83,8 +84,8 @@ begin
     'KS' +
     'N' + PadLeftNum(SeqNo, 3) +
     'L' + ToTenthMm(Item.Length, 5) +
-    'T' + PadRightText(Item.Articul, 13) +
-    'B' + PadRightText(Item.Name, 20) +
+    'T' + PadRightText(CyrillicToLatin(Item.Articul), 13) +
+    'B' + PadRightText(CyrillicToLatin(Item.Name), 20) +
     'O' + PadLeftNum(0, 6)
   );
 end;
@@ -104,8 +105,8 @@ begin
     'P' + PadRightText('', 9) +
     'E' + PadLeftNum(0, 3) +
     'U' + PadRightText('', 1) +
-    'T' + PadRightText(Item.Articul, 13) +
-    'B' + PadRightText(Item.Name, 20) +
+    'T' + PadRightText(CyrillicToLatin(Item.Articul), 13) +
+    'B' + PadRightText(CyrillicToLatin(Item.Name), 20) +
     'L' + ToTenthMm(Detail.Length, 5) +
     'G' + ToTenthDeg(Detail.Ug1, 4) + ToTenthDeg(Detail.Ug2, 4) +
     'D' + PadLeftNum(1, 1) +
