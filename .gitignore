@@ -1,0 +1,20 @@
+# Delphi: скомпилированные и временные
+*.dcu
+*.exe
+*.drc
+*.local
+*.identcache
+__history\
+Win32\
+Release\
+*.~*
+
+# Конфиг с путями (может быть локальным)
+# ow_sturtz_link.ini
+
+# Папки проекта
+temp/
+backup/
+
+# Одноразовый скрипт настройки Git
+setup_git.bat
