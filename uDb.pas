@@ -173,13 +173,13 @@ begin
   FSql.SQL.Text :=
     'select o.GRORDERID, o.GRO_NAME, t.FOLDERNAME, ' +
     '(select count(*) from ( ' +
-    '  select 1 from OPTIMIZED o2 ' +
+    '  select 1 as c from OPTIMIZED o2 ' +
     '  join VIRTARTICULES v on v.ARTICULID = o2.ARTICULID ' +
     '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o2.VIRTARTTYPEID ' +
     '  where o2.ARTICULID is not null and o2.GRORDID = o.GRORDERID ' +
     '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
     '  union all ' +
-    '  select 1 from OPTIMIZED o2 ' +
+    '  select 1 as c from OPTIMIZED o2 ' +
     '  join BRUS b on b.BRUSID = o2.BRUSID ' +
     '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o2.VIRTARTTYPEID ' +
     '  left join COLORSPART cp on cp.COLORSPARTID = o2.EXTCOLORID ' +
@@ -187,7 +187,7 @@ begin
     '    and o2.GRORDID = o.GRORDERID ' +
     '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
     '  union all ' +
-    '  select 1 from OPTIMIZED o2 ' +
+    '  select 1 as c from OPTIMIZED o2 ' +
     '  join OPTARTCOLORED oac on oac.COLOREDID = o2.COLOREDID ' +
     '  join OPTART oa on oa.OA_ID = oac.OA_ID ' +
     '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o2.VIRTARTTYPEID ' +

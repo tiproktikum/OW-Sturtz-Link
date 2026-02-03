@@ -80,6 +80,7 @@ type
     procedure RefreshGroups;
     procedure ApplyFilter;
     procedure InitGridColumnWidths;
+    procedure SetGridGroupHeaders;
     function SelectedGroupRef: TGroupOrderRef;
     function SanitizeFileNameForWindows(const S: string): string;
   public
@@ -93,6 +94,12 @@ implementation
 uses
   uSturtzSob;
 
+const
+  ColName = 0;
+  ColFolder = 1;
+  ColId = 2;
+  ColElementCount = 3;
+
 {$R *.dfm}
 
 procedure TMainForm.FormCreate(Sender: TObject);
@@ -100,7 +107,7 @@ begin
   FConfig := TAppConfig.Create;
   FDb := TDbManager.Create;
   LoadConfig;
-  gridGroups.Cells[3, 0] := 'Кол-во эл.';
+  SetGridGroupHeaders;
   InitGridColumnWidths;
 end;
 
@@ -164,28 +171,33 @@ begin
   gridGroups.RowCount := Length(FFilteredGroups) + 1;
   for I := 0 to High(FFilteredGroups) do
   begin
-    gridGroups.Cells[0, I + 1] := FFilteredGroups[I].Name;
-    gridGroups.Cells[1, I + 1] := FFilteredGroups[I].FolderName;
-    gridGroups.Cells[2, I + 1] := IntToStr(FFilteredGroups[I].Id);
-    gridGroups.Cells[3, I + 1] := IntToStr(FFilteredGroups[I].ElementCount);
+    gridGroups.Cells[ColName, I + 1] := FFilteredGroups[I].Name;
+    gridGroups.Cells[ColFolder, I + 1] := FFilteredGroups[I].FolderName;
+    gridGroups.Cells[ColId, I + 1] := IntToStr(FFilteredGroups[I].Id);
+    gridGroups.Cells[ColElementCount, I + 1] := IntToStr(FFilteredGroups[I].ElementCount);
   end;
 end;
 
 procedure TMainForm.InitGridColumnWidths;
 begin
-  gridGroups.ColWidths[0] := 280;  // Наименование группы
-  gridGroups.ColWidths[1] := 142;  // Папка
-  gridGroups.ColWidths[2] := 50;   // ID
-  gridGroups.ColWidths[3] := 120; // Кол-во эл.
+  gridGroups.ColWidths[ColName] := 280;         // Наименование группы
+  gridGroups.ColWidths[ColFolder] := 142;       // Папка
+  gridGroups.ColWidths[ColId] := 50;            // ID
+  gridGroups.ColWidths[ColElementCount] := 120; // Кол-во эл.
+end;
+
+procedure TMainForm.SetGridGroupHeaders;
+begin
+  gridGroups.Cells[ColName, 0] := 'Наименование группы';
+  gridGroups.Cells[ColFolder, 0] := 'Папка';
+  gridGroups.Cells[ColId, 0] := 'ID';
+  gridGroups.Cells[ColElementCount, 0] := 'Кол-во эл.';
 end;
 
 procedure TMainForm.RefreshGroups;
 begin
   FAllGroups := FDb.GetGroupOrders;
-  gridGroups.Cells[0, 0] := 'Наименование группы';
-  gridGroups.Cells[1, 0] := 'Папка';
-  gridGroups.Cells[2, 0] := 'ID';
-  gridGroups.Cells[3, 0] := 'Кол-во эл.';
+  SetGridGroupHeaders;
   ApplyFilter;
   InitGridColumnWidths;
   Log(Format('Загружено групп: %d', [Length(FAllGroups)]));
@@ -213,7 +225,7 @@ begin
   for I := 1 to Length(S) do
   begin
     C := S[I];
-    if not (C in InvalidChars) and (Ord(C) >= 32) then
+    if not CharInSet(C, InvalidChars) and (Ord(C) >= 32) then
       Result := Result + C;
   end;
   Result := Trim(Result);
