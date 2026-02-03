@@ -79,14 +79,14 @@ end;
 
 procedure TSturtzSobBuilder.AddKs(const Item: TOptimizedItem; const SeqNo: Integer);
 begin
-  // KSNxxxLxxxxxTxxxxxxxxxxxxxBxxxxxxxxxxxxxxxxxxxxOxxxxxx
+  // VER02.07: B на поз.32, O на поз.53, тело O поз.54–59 (см. temp/Позиции_кодов_SOB_наша_версия.md)
   FLines.Add(
     'KS' +
     'N' + PadLeftNum(SeqNo, 3) +
     'L' + ToTenthMm(Item.Length, 5) +
-    'T' + PadRightText(CyrillicToLatin(Item.Articul), 13) +
+    'T' + PadRightText(CyrillicToLatin(Item.Articul), 18) +
     'B' + PadRightText(CyrillicToLatin(Item.Name), 20) +
-    'O' + PadLeftNum(0, 6)
+    '0' + PadLeftNum(0, 6)
   );
 end;
 
@@ -94,7 +94,7 @@ procedure TSturtzSobBuilder.AddKt(const Detail: TOptimizedDetail; const Item: TO
 var
   OrderCode: string;
 begin
-  // KTNxxxxCxxxFxxxKxxxxxxxxPxxxxxxxxxExxxUxTxxxxxxxxxxxxxBxxxxxxxxxxxxxxxxxxxxLxxxxxGxxxxxxxxDxSxWxIxxxxx...xxxZxx..xx
+  // VER02.07: T 19 символов, B на поз.60 (см. temp/Позиции_кодов_SOB_наша_версия.md)
   OrderCode := PadRightText(IntToStr(Detail.OrderId), 8);
   FLines.Add(
     'KT' +
@@ -105,7 +105,7 @@ begin
     'P' + PadRightText('', 9) +
     'E' + PadLeftNum(0, 3) +
     'U' + PadRightText('', 1) +
-    'T' + PadRightText(CyrillicToLatin(Item.Articul), 13) +
+    'T' + PadRightText(CyrillicToLatin(Item.Articul), 19) +
     'B' + PadRightText(CyrillicToLatin(Item.Name), 20) +
     'L' + ToTenthMm(Detail.Length, 5) +
     'G' + ToTenthDeg(Detail.Ug1, 4) + ToTenthDeg(Detail.Ug2, 4) +
