@@ -1,4 +1,4 @@
-unit uMainForm;
+﻿unit uMainForm;
 
 interface
 
@@ -38,7 +38,6 @@ type
     edtExportDir: TEdit;
     btnBrowseExportDir: TButton;
     btnSaveConfig: TButton;
-    btnLoadGroups: TButton;
     listGroups: TListBox;
     btnExport: TButton;
     memoLog: TMemo;
@@ -47,6 +46,8 @@ type
     pBottom: TPanel;
     pTop: TPanel;
     Image1: TImage;
+    pMain: TPanel;
+    lblLog: TLabel;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure btnBrowseDbClick(Sender: TObject);
@@ -54,9 +55,7 @@ type
     procedure btnConnectClick(Sender: TObject);
     procedure btnDisconnectClick(Sender: TObject);
     procedure btnSaveConfigClick(Sender: TObject);
-    procedure btnLoadGroupsClick(Sender: TObject);
     procedure btnExportClick(Sender: TObject);
-    procedure pBottomClick(Sender: TObject);
   private
     FConfig: TAppConfig;
     FDb: TDbManager;
@@ -120,11 +119,6 @@ begin
   memoLog.Lines.Add(FormatDateTime('yyyy-mm-dd hh:nn:ss', Now) + '  ' + Msg);
 end;
 
-procedure TMainForm.pBottomClick(Sender: TObject);
-begin
-
-end;
-
 procedure TMainForm.ClearGroupList;
 var
   I: Integer;
@@ -181,7 +175,10 @@ begin
   SaveConfig;
   try
     if FDb.Connect(FConfig) then
-      Log('Подключение к БД выполнено.')
+    begin
+      Log('Подключение к БД выполнено.');
+      RefreshGroups;
+    end
     else
       Log('Не удалось подключиться к БД.');
   except
@@ -192,6 +189,7 @@ end;
 
 procedure TMainForm.btnDisconnectClick(Sender: TObject);
 begin
+  ClearGroupList;
   FDb.Disconnect;
   Log('Отключено от БД.');
 end;
@@ -200,13 +198,6 @@ procedure TMainForm.btnSaveConfigClick(Sender: TObject);
 begin
   SaveConfig;
   Log('Настройки подключения сохранены.');
-end;
-
-procedure TMainForm.btnLoadGroupsClick(Sender: TObject);
-begin
-  if not FDb.IsConnected then
-    raise Exception.Create('Сначала подключитесь к БД.');
-  RefreshGroups;
 end;
 
 procedure TMainForm.btnExportClick(Sender: TObject);
