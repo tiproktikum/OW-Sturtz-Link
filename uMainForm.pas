@@ -7,6 +7,7 @@ uses
   Winapi.Messages,
   Winapi.ShellAPI,
   System.SysUtils,
+  System.UITypes,
   System.Variants,
   System.Classes,
   System.Generics.Collections,
@@ -26,28 +27,13 @@ uses
 
 type
   TMainForm = class(TForm)
-    lblDbPath: TLabel;
-    edtDbPath: TEdit;
-    btnBrowseDb: TButton;
+    pConnect: TPanel;
+    btnSettings: TButton;
     btnConnect: TButton;
     btnDisconnect: TButton;
-    lblUser: TLabel;
-    edtUser: TEdit;
-    lblPassword: TLabel;
-    edtPassword: TEdit;
-    lblRole: TLabel;
-    edtRole: TEdit;
-    lblCharset: TLabel;
-    edtCharset: TEdit;
-    lblExportDir: TLabel;
-    edtExportDir: TEdit;
-    btnBrowseExportDir: TButton;
-    btnSaveConfig: TButton;
     gridGroups: TStringGrid;
     btnExport: TButton;
     memoLog: TMemo;
-    OpenDialogDb: TOpenDialog;
-    pConnect: TPanel;
     pBottom: TPanel;
     pTop: TPanel;
     Image1: TImage;
@@ -59,15 +45,16 @@ type
     pButtons: TPanel;
     pSeparator: TPanel;
     Label2: TLabel;
+    bAbout: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
-    procedure btnBrowseDbClick(Sender: TObject);
-    procedure btnBrowseExportDirClick(Sender: TObject);
+    procedure btnSettingsClick(Sender: TObject);
     procedure btnConnectClick(Sender: TObject);
     procedure btnDisconnectClick(Sender: TObject);
-    procedure btnSaveConfigClick(Sender: TObject);
     procedure btnExportClick(Sender: TObject);
     procedure eFilterChange(Sender: TObject);
+    procedure gridGroupsSelectCell(Sender: TObject; ACol, ARow: Longint; var CanSelect: Boolean);
+    procedure bAboutClick(Sender: TObject);
     procedure pMainResize(Sender: TObject);
   private
     FConfig: TAppConfig;
@@ -75,13 +62,13 @@ type
     FAllGroups: TArray<TGroupOrder>;
     FFilteredGroups: TArray<TGroupOrder>;
     procedure LoadConfig;
-    procedure SaveConfig;
     procedure Log(const Msg: string);
     procedure ClearGroupList;
     procedure RefreshGroups;
     procedure ApplyFilter;
     procedure InitGridColumnWidths;
     procedure SetGridGroupHeaders;
+    procedure UpdateConnectButtons;
     function SelectedGroupRef: TGroupOrderRef;
     function SanitizeFileNameForWindows(const S: string): string;
   public
@@ -110,6 +97,21 @@ begin
   LoadConfig;
   SetGridGroupHeaders;
   InitGridColumnWidths;
+  gridGroups.FixedRows := 1;
+  UpdateConnectButtons;
+  try
+    if FDb.Connect(FConfig) then
+    begin
+      Log('Подключение к БД выполнено.');
+      RefreshGroups;
+    end
+    else
+      Log('Не удалось подключиться к БД.');
+  except
+    on E: Exception do
+      Log(E.Message);
+  end;
+  UpdateConnectButtons;
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
@@ -122,23 +124,6 @@ end;
 procedure TMainForm.LoadConfig;
 begin
   FConfig.LoadFromFile(TAppConfig.DefaultConfigPath);
-  edtDbPath.Text := FConfig.DbPath;
-  edtUser.Text := FConfig.DbUser;
-  edtPassword.Text := FConfig.DbPassword;
-  edtRole.Text := FConfig.DbRole;
-  edtCharset.Text := FConfig.DbCharset;
-  edtExportDir.Text := FConfig.LastExportDir;
-end;
-
-procedure TMainForm.SaveConfig;
-begin
-  FConfig.DbPath := edtDbPath.Text;
-  FConfig.DbUser := edtUser.Text;
-  FConfig.DbPassword := edtPassword.Text;
-  FConfig.DbRole := edtRole.Text;
-  FConfig.DbCharset := edtCharset.Text;
-  FConfig.LastExportDir := edtExportDir.Text;
-  FConfig.SaveToFile(TAppConfig.DefaultConfigPath);
 end;
 
 procedure TMainForm.Log(const Msg: string);
@@ -181,7 +166,7 @@ end;
 
 procedure TMainForm.InitGridColumnWidths;
 begin
-  gridGroups.ColWidths[ColName] := 280;         // Наименование группы
+  gridGroups.ColWidths[ColName] := 180;         // Наименование группы
   gridGroups.ColWidths[ColFolder] := 142;       // Папка
   gridGroups.ColWidths[ColId] := 50;            // ID
   gridGroups.ColWidths[ColElementCount] := 120; // Кол-во эл.
@@ -193,6 +178,12 @@ begin
   gridGroups.Cells[ColFolder, 0] := 'Папка';
   gridGroups.Cells[ColId, 0] := 'ID';
   gridGroups.Cells[ColElementCount, 0] := 'Кол-во эл.';
+end;
+
+procedure TMainForm.UpdateConnectButtons;
+begin
+  btnConnect.Enabled := not FDb.IsConnected;
+  btnDisconnect.Enabled := FDb.IsConnected;
 end;
 
 procedure TMainForm.RefreshGroups;
@@ -234,25 +225,17 @@ begin
     Result := 'Group';
 end;
 
-procedure TMainForm.btnBrowseDbClick(Sender: TObject);
-begin
-  OpenDialogDb.Filter := 'База Firebird (*.fdb;*.gdb)|*.fdb;*.gdb|Все файлы (*.*)|*.*';
-  if OpenDialogDb.Execute then
-    edtDbPath.Text := OpenDialogDb.FileName;
-end;
-
-procedure TMainForm.btnBrowseExportDirClick(Sender: TObject);
+procedure TMainForm.btnSettingsClick(Sender: TObject);
 var
-  Dir: string;
+  FileName: string;
 begin
-  Dir := Trim(edtExportDir.Text);
-  if SelectDirectory('Выберите папку выгрузки', '', Dir) then
-    edtExportDir.Text := Dir;
+  FileName := TAppConfig.DefaultConfigPath;
+  ShellExecute(Handle, nil, PChar(FileName), nil, nil, SW_RESTORE);
 end;
 
 procedure TMainForm.btnConnectClick(Sender: TObject);
 begin
-  SaveConfig;
+  LoadConfig;
   try
     if FDb.Connect(FConfig) then
     begin
@@ -265,6 +248,7 @@ begin
     on E: Exception do
       Log(E.Message);
   end;
+  UpdateConnectButtons;
 end;
 
 procedure TMainForm.btnDisconnectClick(Sender: TObject);
@@ -273,6 +257,7 @@ begin
   FAllGroups := nil;
   FDb.Disconnect;
   Log('Отключено от БД.');
+  UpdateConnectButtons;
 end;
 
 procedure TMainForm.eFilterChange(Sender: TObject);
@@ -281,15 +266,29 @@ begin
     ApplyFilter;
 end;
 
+procedure TMainForm.gridGroupsSelectCell(Sender: TObject; ACol, ARow: Longint; var CanSelect: Boolean);
+begin
+  CanSelect := (ARow > 0);
+end;
+
+procedure TMainForm.bAboutClick(Sender: TObject);
+const
+  SAbout = 'OW–Sturtz Link' + sLineBreak + sLineBreak +
+    'Программа связывает систему оптимизации раскроя Optima WIN со станками Stürtz (пильный станок и обрабатывающий центр). ' +
+    'Подключается к базе данных Optima WIN (Firebird), отображает список групп оптимизации (сменных заданий); ' +
+    'по выбранной группе формирует набор файлов выгрузки для станков Stürtz: данные для распила профилей, ' +
+    'операции обработки деталей, этикетки. Поддерживается настройка операций и параметров выгрузки.' + sLineBreak + sLineBreak +
+    'Разработчик:' + sLineBreak +
+    'Тимофей А. Хусамов' + sLineBreak +
+    'email: 89296083361@mail.ru' + sLineBreak +
+    'тел: +7 (929) 608-33-61';
+begin
+  MessageDlg(SAbout, mtInformation, [mbOK], 0);
+end;
+
 procedure TMainForm.pMainResize(Sender: TObject);
 begin
   { ширина колонок таблицы групп фиксирована }
-end;
-
-procedure TMainForm.btnSaveConfigClick(Sender: TObject);
-begin
-  SaveConfig;
-  Log('Настройки подключения сохранены.');
 end;
 
 procedure TMainForm.btnExportClick(Sender: TObject);
@@ -322,9 +321,14 @@ begin
   if Group = nil then
     raise Exception.Create('Сначала выберите группу оптимизации.');
   try
-  ExportDir := Trim(edtExportDir.Text);
+  ExportDir := Trim(FConfig.LastExportDir);
   if ExportDir = '' then
-    raise Exception.Create('Выберите папку выгрузки.');
+  begin
+    if not SelectDirectory('Выберите папку выгрузки', '', ExportDir) then
+      Exit;
+    FConfig.LastExportDir := ExportDir;
+    FConfig.SaveToFile(TAppConfig.DefaultConfigPath);
+  end;
   if not System.SysUtils.DirectoryExists(ExportDir) then
     raise Exception.Create('Папка выгрузки не существует.');
 
