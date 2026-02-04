@@ -295,9 +295,25 @@ begin
   FSql.Close;
   FSql.SQL.Text :=
     'select d.OD_ID, d.OPTIMIZEDID, d.OD_PARTNO, d.OD_LONG, d.OD_QTY, ' +
-    'd.OD_UG1, d.OD_UG2, d.OD_ORDERID, d.OD_WINDOWID, d.OD_NUM, d.OD_SUBNUM ' +
+    'd.OD_UG1, d.OD_UG2, d.OD_ORDERID, d.OD_WINDOWID, d.OD_NUM, d.OD_SUBNUM, ' +
+    'p.SHORTNAME as POSITION_SHORTNAME, ' +
+    'r.SHORTTAG as PART_SHORTTAG ' +
     'from OPT_DETAIL d ' +
     'join OPTIMIZED o on o.OPTIMIZEDID = d.OPTIMIZEDID ' +
+    'left join POSITIONS p on p.POSITIONID = d.POSITIONID ' +
+    'left join ( ' +
+    '  select w.* ' +
+    '  from WINPROFILES w ' +
+    '  join VIRTARTICULES va on va.ARTICULID = w.ARTICULID ' +
+    '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = va.VIRTARTTYPEID ' +
+    '  where vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
+    ') w on w.WINDOWID = d.OD_WINDOWID ' +
+    '  and w.PARTWINDREPID = d.PARTWINDREPID ' +
+    '  and w.WP_PARTNO = d.OD_PARTNO ' +
+    '  and w.POSITIONID = d.POSITIONID ' +
+    '  and w.OUTCOLORID = o.EXTCOLORID ' +
+    '  and w.INCOLORID = o.INTCOLORID ' +
+    'left join PARTWINDOWREP r on r.PARTWINDREPID = w.PARTWINDREPID ' +
     'where o.GRORDID = :GRORDERID ' +
     'order by d.OD_ID';
   FSql.ParamByName('GRORDERID').AsInteger := GrOrderId;
@@ -318,6 +334,14 @@ begin
     Item.WindowId := FSql.FieldByName('OD_WINDOWID').AsInteger;
     Item.Num := FSql.FieldByName('OD_NUM').AsInteger;
     Item.SubNum := FSql.FieldByName('OD_SUBNUM').AsInteger;
+    if not FSql.FieldByName('POSITION_SHORTNAME').IsNull then
+      Item.PositionTag := FSql.FieldByName('POSITION_SHORTNAME').AsString
+    else
+      Item.PositionTag := '';
+    if not FSql.FieldByName('PART_SHORTTAG').IsNull then
+      Item.PartShortTag := FSql.FieldByName('PART_SHORTTAG').AsString
+    else
+      Item.PartShortTag := '';
     SetLength(Items, Count + 1);
     Items[Count] := Item;
     Inc(Count);

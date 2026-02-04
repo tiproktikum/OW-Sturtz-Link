@@ -39,6 +39,8 @@ type
     WindowId: Integer;
     Num: Integer;
     SubNum: Integer;
+    PositionTag: string;
+    PartShortTag: string;
   end;
 
   TGroupOrderRef = class

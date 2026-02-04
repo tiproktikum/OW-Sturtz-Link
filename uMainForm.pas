@@ -366,8 +366,9 @@ var
   Builder: TSturtzSobBuilder;
   SoeBuilder: TSturtzSoeBuilder;
   ItemByOptimizedId: TDictionary<Integer, TOptimizedItem>;
-  KsSeqByOptimizedId: TDictionary<Integer, Integer>;
+  KsSeqsByOptimizedId: TDictionary<Integer, TList<Integer>>;
   KtSeqByDetailId: TDictionary<Integer, Integer>;
+  DetailsByOptimizedId: TDictionary<Integer, TList<TOptimizedDetail>>;
   ProfileCodeMap: TDictionary<string, string>;
   OptimizedItems: TArray<TOptimizedItem>;
   OptimizedDetails: TArray<TOptimizedDetail>;
@@ -375,6 +376,10 @@ var
   MappedItem: TOptimizedItem;
   ItemForDetail: TOptimizedItem;
   Detail: TOptimizedDetail;
+  DetailList: TList<TOptimizedDetail>;
+  KsSeqs: TList<Integer>;
+  BarIndex: Integer;
+  BarCount: Integer;
   SeqKs: Integer;
   SeqKt: Integer;
   KtSeq: Integer;
@@ -410,30 +415,53 @@ begin
   Builder := TSturtzSobBuilder.Create;
   SoeBuilder := TSturtzSoeBuilder.Create;
   ItemByOptimizedId := TDictionary<Integer, TOptimizedItem>.Create;
-  KsSeqByOptimizedId := TDictionary<Integer, Integer>.Create;
+  KsSeqsByOptimizedId := TDictionary<Integer, TList<Integer>>.Create;
   KtSeqByDetailId := TDictionary<Integer, Integer>.Create;
+  DetailsByOptimizedId := TDictionary<Integer, TList<TOptimizedDetail>>.Create;
   ProfileCodeMap := LoadProfileCodeMap;
   try
     Builder.AddVerHeader('02.07');
     SeqKs := 1;
     SeqKt := 1;
+    for Detail in OptimizedDetails do
+    begin
+      if not DetailsByOptimizedId.TryGetValue(Detail.OptimizedId, DetailList) then
+      begin
+        DetailList := TList<TOptimizedDetail>.Create;
+        DetailsByOptimizedId.Add(Detail.OptimizedId, DetailList);
+      end;
+      DetailList.Add(Detail);
+    end;
     for Item in OptimizedItems do
     begin
       ItemByOptimizedId.AddOrSetValue(Item.OptimizedId, Item);
-      KsSeqByOptimizedId.AddOrSetValue(Item.OptimizedId, SeqKs);
       MappedItem := Item;
       MappedItem.Articul := MapProfileCode(Item.Articul, ProfileCodeMap);
-      Builder.AddKs(MappedItem, SeqKs);
-      Inc(SeqKs);
-      for Detail in OptimizedDetails do
-        if Detail.OptimizedId = Item.OptimizedId then
+      if Item.Qty > 0 then
+        BarCount := Item.Qty
+      else
+        BarCount := 1;
+      for BarIndex := 1 to BarCount do
+      begin
+        Builder.AddKs(MappedItem, SeqKs);
+        if not KsSeqsByOptimizedId.TryGetValue(Item.OptimizedId, KsSeqs) then
         begin
-          Builder.AddKt(Detail, MappedItem, SeqKt);
-          KtSeqByDetailId.AddOrSetValue(Detail.DetailId, SeqKt);
-          Inc(SeqKt);
+          KsSeqs := TList<Integer>.Create;
+          KsSeqsByOptimizedId.Add(Item.OptimizedId, KsSeqs);
         end;
-      if Item.Ostat > 0 then
-        Builder.AddKr(MappedItem);
+        KsSeqs.Add(SeqKs);
+        Inc(SeqKs);
+        if DetailsByOptimizedId.TryGetValue(Item.OptimizedId, DetailList) then
+          for Detail in DetailList do
+            if (Detail.Num = BarIndex) or ((BarCount = 1) and (Detail.Num = 0)) then
+            begin
+              Builder.AddKt(Detail, MappedItem, SeqKt, Group.Name);
+              KtSeqByDetailId.AddOrSetValue(Detail.DetailId, SeqKt);
+              Inc(SeqKt);
+            end;
+        if Item.Ostat > 0 then
+          Builder.AddKr(MappedItem);
+      end;
     end;
     Builder.SaveToFile(FileName);
     for Detail in OptimizedDetails do
@@ -464,30 +492,38 @@ begin
     for Item in OptimizedItems do
       if Item.Ostat > 0 then
       begin
-        if not KsSeqByOptimizedId.TryGetValue(Item.OptimizedId, KsSeq) then
+        if not KsSeqsByOptimizedId.TryGetValue(Item.OptimizedId, KsSeqs) then
           Continue;
-        SoeBuilder.AddEdnr(KsSeq, ['OSTATOK']);
-        ProfileCode := MapProfileCode(Item.Articul, ProfileCodeMap);
-        SoeBuilder.AddEdnr(KsSeq, ['PROFIL:' + ProfileCode]);
-        ColorText := Item.OutColor;
-        if ColorText = '' then
-          ColorText := '-';
-        SoeBuilder.AddEdnr(KsSeq, ['CVET:' + ColorText]);
-        SoeBuilder.AddEdnr(KsSeq, ['DLINA:' + IntToStr(Round(Item.Ostat)) + ' MM']);
+        for KsSeq in KsSeqs do
+        begin
+          SoeBuilder.AddEdnr(KsSeq, ['OSTATOK']);
+          ProfileCode := MapProfileCode(Item.Articul, ProfileCodeMap);
+          SoeBuilder.AddEdnr(KsSeq, ['PROFIL:' + ProfileCode]);
+          ColorText := Item.OutColor;
+          if ColorText = '' then
+            ColorText := '-';
+          SoeBuilder.AddEdnr(KsSeq, ['CVET:' + ColorText]);
+          SoeBuilder.AddEdnr(KsSeq, ['DLINA:' + IntToStr(Round(Item.Ostat)) + ' MM']);
+        end;
       end;
     SoeBuilder.SaveToFile(SoeFileName);
   finally
     Builder.Free;
     SoeBuilder.Free;
     ItemByOptimizedId.Free;
-    KsSeqByOptimizedId.Free;
     KtSeqByDetailId.Free;
+    for DetailList in DetailsByOptimizedId.Values do
+      DetailList.Free;
+    DetailsByOptimizedId.Free;
+    for KsSeqs in KsSeqsByOptimizedId.Values do
+      KsSeqs.Free;
+    KsSeqsByOptimizedId.Free;
     ProfileCodeMap.Free;
   end;
 
   Log('Выгружено: ' + FileName);
   Log('Выгружено: ' + SoeFileName);
-  Log(Format('KS: %d, KT: %d', [Length(OptimizedItems), Length(OptimizedDetails)]));
+  Log(Format('KS: %d, KT: %d', [SeqKs - 1, SeqKt - 1]));
   ShellExecute(0, 'explore', PChar(ExportDir), nil, nil, SW_SHOWNORMAL);
   finally
     Group.Free;

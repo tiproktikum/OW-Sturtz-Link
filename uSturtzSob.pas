@@ -12,16 +12,19 @@ type
   TSturtzSobBuilder = class
   private
     FLines: TStringList;
+    FPositionSeq: Integer;
     function PadLeftNum(const Value: Int64; const Width: Integer): string;
     function PadRightText(const Value: string; const Width: Integer): string;
     function ToTenthMm(const ValueMm: Double; const Width: Integer): string;
     function ToTenthDeg(const ValueDeg: Double; const Width: Integer): string;
+    function BuildPositionCode(const Detail: TOptimizedDetail; const PositionSeq: Integer): string;
   public
     constructor Create;
     destructor Destroy; override;
     procedure AddVerHeader(const VersionStr: string);
     procedure AddKs(const Item: TOptimizedItem; const SeqNo: Integer);
-    procedure AddKt(const Detail: TOptimizedDetail; const Item: TOptimizedItem; const SeqNo: Integer);
+    procedure AddKt(const Detail: TOptimizedDetail; const Item: TOptimizedItem;
+      const SeqNo: Integer; const GroupName: string);
     procedure AddKr(const Item: TOptimizedItem);
     procedure SaveToFile(const FileName: string);
   end;
@@ -43,11 +46,54 @@ type
 
 implementation
 
+function ElementCodeFromShortTag(const ShortTag: string): Integer;
+var
+  Tag: string;
+begin
+  Tag := Trim(ShortTag);
+  if SameText(Tag, 'Иг') or SameText(Tag, 'Ив') then
+    Exit(300);
+  if SameText(Tag, 'Ш') then
+    Exit(400);
+  if SameText(Tag, 'C') or SameText(Tag, 'С') then
+    Exit(1);
+  Result := 100;
+end;
+
+function PositionCodeFromShortName(const ShortName: string): string;
+var
+  FirstChar: string;
+begin
+  FirstChar := Trim(ShortName);
+  if FirstChar <> '' then
+    FirstChar := Copy(FirstChar, 1, 1);
+  if SameText(FirstChar, 'Л') then
+    Exit('L');
+  if SameText(FirstChar, 'П') then
+    Exit('R');
+  if SameText(FirstChar, 'В') then
+    Exit('O');
+  Result := 'U';
+end;
+
+function PositionPrefixFromShortTag(const ShortTag: string): string;
+var
+  Tag: string;
+begin
+  Tag := Trim(ShortTag);
+  if SameText(Tag, 'Иг') or SameText(Tag, 'Ив') then
+    Exit('I');
+  if SameText(Tag, 'C') or SameText(Tag, 'С') then
+    Exit('C');
+  Result := 'P';
+end;
+
 constructor TSturtzSobBuilder.Create;
 begin
   inherited Create;
   FLines := TStringList.Create;
   FLines.LineBreak := sLineBreak;
+  FPositionSeq := 0;
 end;
 
 destructor TSturtzSobBuilder.Destroy;
@@ -92,6 +138,22 @@ begin
   Result := PadLeftNum(V, Width);
 end;
 
+function TSturtzSobBuilder.BuildPositionCode(const Detail: TOptimizedDetail;
+  const PositionSeq: Integer): string;
+var
+  Prefix: string;
+  Xxx: string;
+begin
+  Prefix := PositionPrefixFromShortTag(Detail.PartShortTag);
+  if SameText(Prefix, 'I') then
+    Xxx := 'I11'
+  else if SameText(Prefix, 'C') then
+    Xxx := 'C21'
+  else
+    Xxx := 'P01';
+  Result := Xxx + '010' + PadLeftNum(PositionSeq, 3);
+end;
+
 procedure TSturtzSobBuilder.AddKs(const Item: TOptimizedItem; const SeqNo: Integer);
 begin
   // VER02.07: B на поз.32, O (англ. буква) на поз.53, тело O с поз.54 (см. temp/Позиции_кодов_SOB_наша_версия.md)
@@ -99,29 +161,37 @@ begin
     'KS' +
     'N' + PadLeftNum(SeqNo, 3) +
     'L' + ToTenthMm(Item.Length, 5) +
-    'T' + PadRightText(CyrillicToLatin(Item.Articul), 18) +
-    'B' + PadRightText(CyrillicToLatin(Item.Name), 20) +
+    'T' + PadRightText(CyrillicToLatin(Item.Articul), 14) + 'ohne' +
+    'B' + PadRightText('weiss', 20) +
     'O' + PadLeftNum(0, 6)
   );
 end;
 
-procedure TSturtzSobBuilder.AddKt(const Detail: TOptimizedDetail; const Item: TOptimizedItem; const SeqNo: Integer);
+procedure TSturtzSobBuilder.AddKt(const Detail: TOptimizedDetail; const Item: TOptimizedItem;
+  const SeqNo: Integer; const GroupName: string);
 var
   OrderCode: string;
+  ElementCode: Integer;
+  ElementCodeStr: string;
+  PositionCode: string;
 begin
   // VER02.07: T 18 символов, B на поз.60, L на 81, Z на 128 (см. temp/Позиции_кодов_SOB_наша_версия.md)
-  OrderCode := PadRightText(IntToStr(Detail.OrderId), 8);
+  ElementCode := ElementCodeFromShortTag(Detail.PartShortTag);
+  ElementCodeStr := PadLeftNum(ElementCode, 3);
+  OrderCode := PadRightText(Copy(ElementCodeStr, 1, 1) + CyrillicToLatin(GroupName), 8);
+  Inc(FPositionSeq);
+  PositionCode := BuildPositionCode(Detail, FPositionSeq);
   FLines.Add(
     'KT' +
     'N' + PadLeftNum(SeqNo, 4) +
-    'C' + PadLeftNum(0, 3) +
-    'F' + PadRightText('', 3) +
+    'C' + PadLeftNum(1, 3) +
+    'F' + PadLeftNum(0, 3) +
     'K' + OrderCode +
-    'P' + PadRightText('', 9) +
-    'E' + PadLeftNum(0, 3) +
-    'U' + PadRightText('', 1) +
-    'T' + PadRightText(CyrillicToLatin(Item.Articul), 18) +
-    'B' + PadRightText(CyrillicToLatin(Item.Name), 20) +
+    'P' + PadRightText(PositionCode, 9) +
+    'E' + ElementCodeStr +
+    'U' + PadRightText(CyrillicToLatin(PositionCodeFromShortName(Detail.PositionTag)), 1) +
+    'T' + PadRightText(CyrillicToLatin(Item.Articul), 14) + 'ohne' +
+    'B' + PadRightText('weiss', 20) +
     'L' + ToTenthMm(Detail.Length, 5) +
     'G' + ToTenthDeg(Detail.Ug1, 4) + ToTenthDeg(Detail.Ug2, 4) +
     'D' + PadLeftNum(1, 1) +
