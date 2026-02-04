@@ -172,28 +172,12 @@ begin
   FSql.Close;
   FSql.SQL.Text :=
     'select o.GRORDERID, o.GRO_NAME, t.FOLDERNAME, ' +
-    '(select count(*) from ( ' +
-    '  select 1 as c from OPTIMIZED o2 ' +
-    '  join VIRTARTICULES v on v.ARTICULID = o2.ARTICULID ' +
-    '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o2.VIRTARTTYPEID ' +
-    '  where o2.ARTICULID is not null and o2.GRORDID = o.GRORDERID ' +
-    '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
-    '  union all ' +
-    '  select 1 as c from OPTIMIZED o2 ' +
-    '  join BRUS b on b.BRUSID = o2.BRUSID ' +
-    '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o2.VIRTARTTYPEID ' +
-    '  left join COLORSPART cp on cp.COLORSPARTID = o2.EXTCOLORID ' +
-    '  where o2.BRUSID is not null and cp.COLORSPARTID = -1 ' +
-    '    and o2.GRORDID = o.GRORDERID ' +
-    '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
-    '  union all ' +
-    '  select 1 as c from OPTIMIZED o2 ' +
-    '  join OPTARTCOLORED oac on oac.COLOREDID = o2.COLOREDID ' +
-    '  join OPTART oa on oa.OA_ID = oac.OA_ID ' +
-    '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o2.VIRTARTTYPEID ' +
-    '  where o2.COLOREDID is not null and o2.GRORDID = o.GRORDERID ' +
-    '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
-    ') x) as ELEM_CNT ' +
+    '(select count(*) from OPTIMIZED o2 ' +
+    'join OPTARTCOLORED oac on oac.COLOREDID = o2.COLOREDID ' +
+    'join OPTART oa on oa.OA_ID = oac.OA_ID ' +
+    'join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o2.VIRTARTTYPEID ' +
+    'where o2.GRORDID = o.GRORDERID ' +
+    '  and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'')) as ELEM_CNT ' +
     'from GRORDERS o ' +
     'left join TREEFOLDERS t on t.TREEFOLDERID = o.TREEFOLDERID ' +
     'where o.ISOPTIMIZED = 1 ' +
@@ -243,62 +227,20 @@ begin
 
   FSql.Close;
   FSql.SQL.Text :=
-    'select OPTIMIZEDID, GRORDERID, ITEMID, OP_ARTICUL, OP_NAME, ' +
-    'OUTCOLOR, INCOLOR, OP_QTY, OP_LONG, OP_OSTAT, OP_SUMPROF, ' +
-    'OP_ISOFPAIR, ITEMTYPE, LONG_RASPIL ' +
-    'from ( ' +
-    '  select ' +
-    '    o.optimizedid as OPTIMIZEDID, o.grordid as GRORDERID, ' +
-    '    v.articulid as ITEMID, v.ar_art as OP_ARTICUL, v.ar_longname as OP_NAME, ' +
-    '    cp1.cp_name as OUTCOLOR, cp2.cp_name as INCOLOR, ' +
-    '    o.op_qty as OP_QTY, o.op_long as OP_LONG, ' +
-    '    o.op_ostat as OP_OSTAT, o.op_sumprof as OP_SUMPROF, ' +
-    '    o.op_isforpair as OP_ISOFPAIR, cast(1 as integer) as ITEMTYPE, ' +
-    '    (o.op_long - o.op_ostat) as LONG_RASPIL ' +
-    '  from OPTIMIZED o ' +
-    '  join VIRTARTICULES v on v.ARTICULID = o.ARTICULID ' +
-    '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o.VIRTARTTYPEID ' +
-    '  left join COLORSPART cp1 on cp1.COLORSPARTID = o.EXTCOLORID ' +
-    '  left join COLORSPART cp2 on cp2.COLORSPARTID = o.INTCOLORID ' +
-    '  where o.ARTICULID is not null ' +
-    '    and o.GRORDID = :GRORDERID ' +
-    '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
-    '  union all ' +
-    '  select ' +
-    '    o.optimizedid as OPTIMIZEDID, o.grordid as GRORDERID, ' +
-    '    b.brusid as ITEMID, b.brus as OP_ARTICUL, cast(''Брус'' as varchar(64)) as OP_NAME, ' +
-    '    cp.cp_name as OUTCOLOR, cp.cp_name as INCOLOR, ' +
-    '    o.op_qty as OP_QTY, o.op_long as OP_LONG, ' +
-    '    o.op_ostat as OP_OSTAT, o.op_sumprof as OP_SUMPROF, ' +
-    '    o.op_isforpair as OP_ISOFPAIR, cast(2 as integer) as ITEMTYPE, ' +
-    '    (o.op_long - o.op_ostat) as LONG_RASPIL ' +
-    '  from OPTIMIZED o ' +
-    '  join BRUS b on b.BRUSID = o.BRUSID ' +
-    '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o.VIRTARTTYPEID ' +
-    '  left join COLORSPART cp on cp.COLORSPARTID = o.EXTCOLORID ' +
-    '  where o.BRUSID is not null and cp.COLORSPARTID = -1 ' +
-    '    and o.GRORDID = :GRORDERID ' +
-    '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
-    '  union all ' +
-    '  select ' +
-    '    o.optimizedid as OPTIMIZEDID, o.grordid as GRORDERID, ' +
-    '    o.coloredid as ITEMID, oa.oa_art as OP_ARTICUL, oa.oa_name as OP_NAME, ' +
-    '    cp1.cp_name as OUTCOLOR, cp2.cp_name as INCOLOR, ' +
-    '    o.op_qty as OP_QTY, o.op_long as OP_LONG, ' +
-    '    o.op_ostat as OP_OSTAT, o.op_sumprof as OP_SUMPROF, ' +
-    '    o.op_isforpair as OP_ISOFPAIR, cast(3 as integer) as ITEMTYPE, ' +
-    '    (o.op_long - o.op_ostat) as LONG_RASPIL ' +
-    '  from OPTIMIZED o ' +
-    '  join OPTARTCOLORED oac on oac.COLOREDID = o.COLOREDID ' +
-    '  join OPTART oa on oa.OA_ID = oac.OA_ID ' +
-    '  join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o.VIRTARTTYPEID ' +
-    '  left join COLORSPART cp1 on cp1.COLORSPARTID = o.EXTCOLORID ' +
-    '  left join COLORSPART cp2 on cp2.COLORSPARTID = o.INTCOLORID ' +
-    '  where o.COLOREDID is not null ' +
-    '    and o.GRORDID = :GRORDERID ' +
-    '    and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
-    ') t ' +
-    'order by OPTIMIZEDID';
+    'select o.optimizedid as OPTIMIZEDID, o.grordid as GRORDERID, ' +
+    'oa.OA_ID as ITEMID, oa.oa_art as OP_ARTICUL, oa.oa_name as OP_NAME, ' +
+    'cast('''' as varchar(64)) as OUTCOLOR, cast('''' as varchar(64)) as INCOLOR, ' +
+    'o.op_qty as OP_QTY, o.op_long as OP_LONG, ' +
+    'o.op_ostat as OP_OSTAT, o.op_sumprof as OP_SUMPROF, ' +
+    'o.op_isforpair as OP_ISOFPAIR, cast(1 as integer) as ITEMTYPE, ' +
+    '(o.op_long - o.op_ostat) as LONG_RASPIL ' +
+    'from OPTIMIZED o ' +
+    'join OPTARTCOLORED oac on oac.COLOREDID = o.COLOREDID ' +
+    'join OPTART oa on oa.OA_ID = oac.OA_ID ' +
+    'join VIRTARTTYPES vt on vt.VIRTARTTYPEID = o.VIRTARTTYPEID ' +
+    'where o.GRORDID = :GRORDERID ' +
+    '  and vt.DESCRIPTION in (''Профили'', ''Штапики'', ''Соединители'') ' +
+    'order by o.optimizedid';
   FSql.ParamByName('GRORDERID').AsInteger := GrOrderId;
   FSql.ExecQuery;
 

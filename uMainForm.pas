@@ -71,6 +71,10 @@ type
     procedure UpdateConnectButtons;
     function SelectedGroupRef: TGroupOrderRef;
     function SanitizeFileNameForWindows(const S: string): string;
+    function ProfileCodeMapFilePath: string;
+    function LoadProfileCodeMap: TDictionary<string, string>;
+    function MapProfileCode(const OptimaCode: string;
+      const ProfileCodeMap: TDictionary<string, string>): string;
   public
   end;
 
@@ -87,6 +91,7 @@ const
   ColFolder = 1;
   ColId = 2;
   ColElementCount = 3;
+  ProfileCodeMapFileName = 'optima_sturtz_profile_code_mapping.csv';
 
 {$R *.dfm}
 
@@ -225,6 +230,66 @@ begin
     Result := 'Group';
 end;
 
+function TMainForm.ProfileCodeMapFilePath: string;
+begin
+  Result := IncludeTrailingPathDelimiter(ExtractFilePath(ParamStr(0))) +
+    ProfileCodeMapFileName;
+end;
+
+function TMainForm.LoadProfileCodeMap: TDictionary<string, string>;
+var
+  Lines: TStringList;
+  Fields: TStringList;
+  Line: string;
+  OptimaCode: string;
+  SturtzCode: string;
+  I: Integer;
+begin
+  Result := TDictionary<string, string>.Create;
+  if not FileExists(ProfileCodeMapFilePath) then
+    Exit;
+
+  Lines := TStringList.Create;
+  Fields := TStringList.Create;
+  try
+    Fields.StrictDelimiter := True;
+    Fields.Delimiter := ';';
+    Fields.QuoteChar := '"';
+    Lines.LoadFromFile(ProfileCodeMapFilePath);
+    for I := 0 to Lines.Count - 1 do
+    begin
+      Line := Lines[I];
+      if Line = '' then
+        Continue;
+      Fields.DelimitedText := Line;
+      if Fields.Count < 2 then
+        Continue;
+      OptimaCode := Trim(Fields[0]);
+      SturtzCode := Trim(Fields[1]);
+      if (OptimaCode = '') or (SturtzCode = '') then
+        Continue;
+      if (OptimaCode = 'Код профиля Optima WIN') or
+        (SturtzCode = 'Код профиля Sturtz') then
+        Continue;
+      Result.AddOrSetValue(OptimaCode, SturtzCode);
+    end;
+  finally
+    Lines.Free;
+    Fields.Free;
+  end;
+end;
+
+function TMainForm.MapProfileCode(const OptimaCode: string;
+  const ProfileCodeMap: TDictionary<string, string>): string;
+begin
+  Result := OptimaCode;
+  if (OptimaCode = '') or (ProfileCodeMap = nil) then
+    Exit;
+  if ProfileCodeMap.TryGetValue(OptimaCode, Result) and (Result <> '') then
+    Exit;
+  Result := OptimaCode;
+end;
+
 procedure TMainForm.btnSettingsClick(Sender: TObject);
 var
   FileName: string;
@@ -303,9 +368,11 @@ var
   ItemByOptimizedId: TDictionary<Integer, TOptimizedItem>;
   KsSeqByOptimizedId: TDictionary<Integer, Integer>;
   KtSeqByDetailId: TDictionary<Integer, Integer>;
+  ProfileCodeMap: TDictionary<string, string>;
   OptimizedItems: TArray<TOptimizedItem>;
   OptimizedDetails: TArray<TOptimizedDetail>;
   Item: TOptimizedItem;
+  MappedItem: TOptimizedItem;
   ItemForDetail: TOptimizedItem;
   Detail: TOptimizedDetail;
   SeqKs: Integer;
@@ -313,6 +380,7 @@ var
   KtSeq: Integer;
   KsSeq: Integer;
   ColorText: string;
+  ProfileCode: string;
 begin
   if not FDb.IsConnected then
     raise Exception.Create('Сначала подключитесь к БД.');
@@ -344,6 +412,7 @@ begin
   ItemByOptimizedId := TDictionary<Integer, TOptimizedItem>.Create;
   KsSeqByOptimizedId := TDictionary<Integer, Integer>.Create;
   KtSeqByDetailId := TDictionary<Integer, Integer>.Create;
+  ProfileCodeMap := LoadProfileCodeMap;
   try
     Builder.AddVerHeader('02.07');
     SeqKs := 1;
@@ -352,17 +421,19 @@ begin
     begin
       ItemByOptimizedId.AddOrSetValue(Item.OptimizedId, Item);
       KsSeqByOptimizedId.AddOrSetValue(Item.OptimizedId, SeqKs);
-      Builder.AddKs(Item, SeqKs);
+      MappedItem := Item;
+      MappedItem.Articul := MapProfileCode(Item.Articul, ProfileCodeMap);
+      Builder.AddKs(MappedItem, SeqKs);
       Inc(SeqKs);
       for Detail in OptimizedDetails do
         if Detail.OptimizedId = Item.OptimizedId then
         begin
-          Builder.AddKt(Detail, Item, SeqKt);
+          Builder.AddKt(Detail, MappedItem, SeqKt);
           KtSeqByDetailId.AddOrSetValue(Detail.DetailId, SeqKt);
           Inc(SeqKt);
         end;
       if Item.Ostat > 0 then
-        Builder.AddKr(Item);
+        Builder.AddKr(MappedItem);
     end;
     Builder.SaveToFile(FileName);
     for Detail in OptimizedDetails do
@@ -384,8 +455,9 @@ begin
         'POLOZHENIE:',
         'POZ.:' + IntToStr(Detail.PartNo)
       ]);
+      ProfileCode := MapProfileCode(ItemForDetail.Articul, ProfileCodeMap);
       SoeBuilder.AddEdnt(KtSeq, [
-        'PROFIL:' + ItemForDetail.Articul,
+        'PROFIL:' + ProfileCode,
         'DLINA:' + IntToStr(Round(Detail.Length))
       ]);
     end;
@@ -395,7 +467,8 @@ begin
         if not KsSeqByOptimizedId.TryGetValue(Item.OptimizedId, KsSeq) then
           Continue;
         SoeBuilder.AddEdnr(KsSeq, ['OSTATOK']);
-        SoeBuilder.AddEdnr(KsSeq, ['PROFIL:' + Item.Articul]);
+        ProfileCode := MapProfileCode(Item.Articul, ProfileCodeMap);
+        SoeBuilder.AddEdnr(KsSeq, ['PROFIL:' + ProfileCode]);
         ColorText := Item.OutColor;
         if ColorText = '' then
           ColorText := '-';
@@ -409,6 +482,7 @@ begin
     ItemByOptimizedId.Free;
     KsSeqByOptimizedId.Free;
     KtSeqByDetailId.Free;
+    ProfileCodeMap.Free;
   end;
 
   Log('Выгружено: ' + FileName);
