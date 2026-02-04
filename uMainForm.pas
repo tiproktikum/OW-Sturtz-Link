@@ -9,6 +9,7 @@ uses
   System.SysUtils,
   System.Variants,
   System.Classes,
+  System.Generics.Collections,
   Vcl.Graphics,
   Vcl.Controls,
   Vcl.Forms,
@@ -295,14 +296,24 @@ procedure TMainForm.btnExportClick(Sender: TObject);
 var
   Group: TGroupOrderRef;
   ExportDir: string;
+  BaseName: string;
   FileName: string;
+  SoeFileName: string;
   Builder: TSturtzSobBuilder;
+  SoeBuilder: TSturtzSoeBuilder;
+  ItemByOptimizedId: TDictionary<Integer, TOptimizedItem>;
+  KsSeqByOptimizedId: TDictionary<Integer, Integer>;
+  KtSeqByDetailId: TDictionary<Integer, Integer>;
   OptimizedItems: TArray<TOptimizedItem>;
   OptimizedDetails: TArray<TOptimizedDetail>;
   Item: TOptimizedItem;
+  ItemForDetail: TOptimizedItem;
   Detail: TOptimizedDetail;
   SeqKs: Integer;
   SeqKt: Integer;
+  KtSeq: Integer;
+  KsSeq: Integer;
+  ColorText: string;
 begin
   if not FDb.IsConnected then
     raise Exception.Create('Сначала подключитесь к БД.');
@@ -317,36 +328,87 @@ begin
   if not System.SysUtils.DirectoryExists(ExportDir) then
     raise Exception.Create('Папка выгрузки не существует.');
 
-  FileName := IncludeTrailingPathDelimiter(ExportDir) + 'G' +
-    Copy(SanitizeFileNameForWindows(CyrillicToLatin(Group.Name)), 1, 7) + '.SOB';
+  BaseName := 'G' + Copy(SanitizeFileNameForWindows(CyrillicToLatin(Group.Name)), 1, 7);
+  FileName := IncludeTrailingPathDelimiter(ExportDir) + BaseName + '.SOB';
+  SoeFileName := IncludeTrailingPathDelimiter(ExportDir) + BaseName + '.SOE';
 
   OptimizedItems := FDb.GetOptimizedItems(Group.Id);
   OptimizedDetails := FDb.GetOptimizedDetails(Group.Id);
 
   Builder := TSturtzSobBuilder.Create;
+  SoeBuilder := TSturtzSoeBuilder.Create;
+  ItemByOptimizedId := TDictionary<Integer, TOptimizedItem>.Create;
+  KsSeqByOptimizedId := TDictionary<Integer, Integer>.Create;
+  KtSeqByDetailId := TDictionary<Integer, Integer>.Create;
   try
     Builder.AddVerHeader('02.07');
     SeqKs := 1;
     SeqKt := 1;
     for Item in OptimizedItems do
     begin
+      ItemByOptimizedId.AddOrSetValue(Item.OptimizedId, Item);
+      KsSeqByOptimizedId.AddOrSetValue(Item.OptimizedId, SeqKs);
       Builder.AddKs(Item, SeqKs);
       Inc(SeqKs);
       for Detail in OptimizedDetails do
         if Detail.OptimizedId = Item.OptimizedId then
         begin
           Builder.AddKt(Detail, Item, SeqKt);
+          KtSeqByDetailId.AddOrSetValue(Detail.DetailId, SeqKt);
           Inc(SeqKt);
         end;
       if Item.Ostat > 0 then
         Builder.AddKr(Item);
     end;
     Builder.SaveToFile(FileName);
+    for Detail in OptimizedDetails do
+    begin
+      if not KtSeqByDetailId.TryGetValue(Detail.DetailId, KtSeq) then
+        Continue;
+      if not ItemByOptimizedId.TryGetValue(Detail.OptimizedId, ItemForDetail) then
+        Continue;
+      SoeBuilder.AddEdnt(KtSeq, [
+        'TAB-NO:' + IntToStr(Detail.OrderId),
+        'IZDEL-NO:' + IntToStr(Detail.PartNo)
+      ]);
+      SoeBuilder.AddEdnt(KtSeq, [
+        'ZAKAZCHIK:' + Group.Name,
+        'KOM:' + IntToStr(Group.Id)
+      ]);
+      SoeBuilder.AddEdnt(KtSeq, [
+        'NA POZ.:' + IntToStr(Detail.PartNo),
+        'POLOZHENIE:',
+        'POZ.:' + IntToStr(Detail.PartNo)
+      ]);
+      SoeBuilder.AddEdnt(KtSeq, [
+        'PROFIL:' + ItemForDetail.Articul,
+        'DLINA:' + IntToStr(Round(Detail.Length))
+      ]);
+    end;
+    for Item in OptimizedItems do
+      if Item.Ostat > 0 then
+      begin
+        if not KsSeqByOptimizedId.TryGetValue(Item.OptimizedId, KsSeq) then
+          Continue;
+        SoeBuilder.AddEdnr(KsSeq, ['OSTATOK']);
+        SoeBuilder.AddEdnr(KsSeq, ['PROFIL:' + Item.Articul]);
+        ColorText := Item.OutColor;
+        if ColorText = '' then
+          ColorText := '-';
+        SoeBuilder.AddEdnr(KsSeq, ['CVET:' + ColorText]);
+        SoeBuilder.AddEdnr(KsSeq, ['DLINA:' + IntToStr(Round(Item.Ostat)) + ' MM']);
+      end;
+    SoeBuilder.SaveToFile(SoeFileName);
   finally
     Builder.Free;
+    SoeBuilder.Free;
+    ItemByOptimizedId.Free;
+    KsSeqByOptimizedId.Free;
+    KtSeqByDetailId.Free;
   end;
 
   Log('Выгружено: ' + FileName);
+  Log('Выгружено: ' + SoeFileName);
   Log(Format('KS: %d, KT: %d', [Length(OptimizedItems), Length(OptimizedDetails)]));
   ShellExecute(0, 'explore', PChar(ExportDir), nil, nil, SW_SHOWNORMAL);
   finally

@@ -26,6 +26,21 @@ type
     procedure SaveToFile(const FileName: string);
   end;
 
+  TSturtzSoeBuilder = class
+  private
+    FLines: TStringList;
+    function PadLeftNum(const Value: Int64; const Width: Integer): string;
+    function PadRightText(const Value: string; const Width: Integer): string;
+    function BlockLenForCount(const Count: Integer): Integer;
+    function BuildBlocksLine(const Blocks: array of string): string;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    procedure AddEdnt(const SeqNo: Integer; const Blocks: array of string);
+    procedure AddEdnr(const SeqNo: Integer; const Blocks: array of string);
+    procedure SaveToFile(const FileName: string);
+  end;
+
 implementation
 
 constructor TSturtzSobBuilder.Create;
@@ -79,14 +94,14 @@ end;
 
 procedure TSturtzSobBuilder.AddKs(const Item: TOptimizedItem; const SeqNo: Integer);
 begin
-  // VER02.07: B на поз.32, O на поз.53, тело O поз.54–59 (см. temp/Позиции_кодов_SOB_наша_версия.md)
+  // VER02.07: B на поз.32, O (англ. буква) на поз.53, тело O с поз.54 (см. temp/Позиции_кодов_SOB_наша_версия.md)
   FLines.Add(
     'KS' +
     'N' + PadLeftNum(SeqNo, 3) +
     'L' + ToTenthMm(Item.Length, 5) +
     'T' + PadRightText(CyrillicToLatin(Item.Articul), 18) +
     'B' + PadRightText(CyrillicToLatin(Item.Name), 20) +
-    '0' + PadLeftNum(0, 6)
+    'O' + PadLeftNum(0, 6)
   );
 end;
 
@@ -94,7 +109,7 @@ procedure TSturtzSobBuilder.AddKt(const Detail: TOptimizedDetail; const Item: TO
 var
   OrderCode: string;
 begin
-  // VER02.07: T 19 символов, B на поз.60 (см. temp/Позиции_кодов_SOB_наша_версия.md)
+  // VER02.07: T 18 символов, B на поз.60, L на 81, Z на 128 (см. temp/Позиции_кодов_SOB_наша_версия.md)
   OrderCode := PadRightText(IntToStr(Detail.OrderId), 8);
   FLines.Add(
     'KT' +
@@ -105,7 +120,7 @@ begin
     'P' + PadRightText('', 9) +
     'E' + PadLeftNum(0, 3) +
     'U' + PadRightText('', 1) +
-    'T' + PadRightText(CyrillicToLatin(Item.Articul), 19) +
+    'T' + PadRightText(CyrillicToLatin(Item.Articul), 18) +
     'B' + PadRightText(CyrillicToLatin(Item.Name), 20) +
     'L' + ToTenthMm(Detail.Length, 5) +
     'G' + ToTenthDeg(Detail.Ug1, 4) + ToTenthDeg(Detail.Ug2, 4) +
@@ -129,6 +144,80 @@ begin
 end;
 
 procedure TSturtzSobBuilder.SaveToFile(const FileName: string);
+begin
+  FLines.SaveToFile(FileName, TEncoding.GetEncoding(1251));
+end;
+
+constructor TSturtzSoeBuilder.Create;
+begin
+  inherited Create;
+  FLines := TStringList.Create;
+  FLines.LineBreak := sLineBreak;
+end;
+
+destructor TSturtzSoeBuilder.Destroy;
+begin
+  FLines.Free;
+  inherited Destroy;
+end;
+
+function TSturtzSoeBuilder.PadLeftNum(const Value: Int64; const Width: Integer): string;
+begin
+  Result := Format('%.*d', [Width, Value]);
+end;
+
+function TSturtzSoeBuilder.PadRightText(const Value: string; const Width: Integer): string;
+var
+  S: string;
+begin
+  S := Value;
+  if Length(S) > Width then
+    S := Copy(S, 1, Width);
+  Result := S + StringOfChar(' ', Width - Length(S));
+end;
+
+function TSturtzSoeBuilder.BlockLenForCount(const Count: Integer): Integer;
+begin
+  case Count of
+    1: Result := 84;
+    2: Result := 41;
+    3: Result := 27;
+    4: Result := 20;
+  else
+    Result := 84;
+  end;
+end;
+
+function TSturtzSoeBuilder.BuildBlocksLine(const Blocks: array of string): string;
+var
+  I: Integer;
+  BlockLen: Integer;
+  Part: string;
+begin
+  Result := '';
+  if Length(Blocks) = 0 then
+    Exit;
+  BlockLen := BlockLenForCount(Length(Blocks));
+  for I := 0 to High(Blocks) do
+  begin
+    Part := PadRightText(CyrillicToLatin(Blocks[I]), BlockLen);
+    if I > 0 then
+      Result := Result + '#';
+    Result := Result + Part;
+  end;
+end;
+
+procedure TSturtzSoeBuilder.AddEdnt(const SeqNo: Integer; const Blocks: array of string);
+begin
+  FLines.Add('EDNT' + PadLeftNum(SeqNo, 4) + 'T' + BuildBlocksLine(Blocks));
+end;
+
+procedure TSturtzSoeBuilder.AddEdnr(const SeqNo: Integer; const Blocks: array of string);
+begin
+  FLines.Add('EDNR' + PadLeftNum(SeqNo, 3) + 'T' + BuildBlocksLine(Blocks));
+end;
+
+procedure TSturtzSoeBuilder.SaveToFile(const FileName: string);
 begin
   FLines.SaveToFile(FileName, TEncoding.GetEncoding(1251));
 end;
