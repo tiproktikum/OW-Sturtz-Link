@@ -111,12 +111,31 @@ begin
   inherited Destroy;
 end;
 
+function BuildConnectionParamsLog(const Config: TAppConfig; const DatabaseName: string): string;
+begin
+  Result :=
+    'Параметры подключения:' + sLineBreak +
+    '  Server (хост): ' + QuotedStr(Config.DbHost) + sLineBreak +
+    '  Path (путь к БД): ' + QuotedStr(Config.DbPath) + sLineBreak +
+    '  DatabaseName (итог): ' + QuotedStr(DatabaseName) + sLineBreak +
+    '  User: ' + QuotedStr(Config.DbUser) + sLineBreak +
+    '  Role: ' + QuotedStr(Config.DbRole) + sLineBreak +
+    '  Charset: ' + QuotedStr(Config.DbCharset);
+end;
+
 function TDbManager.Connect(const Config: TAppConfig): Boolean;
+var
+  DbName: string;
 begin
   if FDb.Connected then
     FDb.Connected := False;
 
-  FDb.DatabaseName := Config.DbPath;
+  if Trim(Config.DbHost) <> '' then
+    DbName := Trim(Config.DbHost) + ':' + Config.DbPath
+  else
+    DbName := Config.DbPath;
+  FDb.DatabaseName := DbName;
+
   FDb.Params.Clear;
   if Config.DbUser <> '' then
     FDb.Params.Add('user_name=' + Config.DbUser);
@@ -127,13 +146,24 @@ begin
   if Config.DbCharset <> '' then
     FDb.Params.Add('lc_ctype=' + Config.DbCharset);
 
+  if Trim(DbName) = '' then
+    raise Exception.Create(
+      'Не задано имя базы данных (Firebird: Database name is missing).' + sLineBreak + sLineBreak +
+      'Файл конфигурации: ' + TAppConfig.DefaultConfigPath + sLineBreak +
+      'Все параметры пустые — ini отсутствовал при первом запуске или не прочитался.' + sLineBreak + sLineBreak +
+      BuildConnectionParamsLog(Config, DbName) + sLineBreak + sLineBreak +
+      'Скопируйте ow_sturtz_link.ini в папку с exe и заполните [Database]: Path=, User=, Password=; при удалённой БД — Server=.'
+    );
+
   try
     FDb.Connected := True;
     Result := FDb.Connected;
   except
     on E: Exception do
       raise Exception.Create(
-        'Ошибка подключения к Firebird: ' + E.Message + sLineBreak +
+        'Ошибка подключения к Firebird: ' + E.Message + sLineBreak + sLineBreak +
+        'Файл конфигурации: ' + TAppConfig.DefaultConfigPath + sLineBreak + sLineBreak +
+        BuildConnectionParamsLog(Config, DbName) + sLineBreak + sLineBreak +
         'Загруженный клиент: ' + GetLoadedFBClientPath + sLineBreak +
         GetSearchDiagnostics
       );
