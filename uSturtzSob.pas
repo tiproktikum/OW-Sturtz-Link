@@ -24,7 +24,7 @@ type
     procedure AddVerHeader(const VersionStr: string);
     procedure AddKs(const Item: TOptimizedItem; const SeqNo: Integer);
     procedure AddKt(const Detail: TOptimizedDetail; const Item: TOptimizedItem;
-      const SeqNo: Integer; const GroupName: string);
+      const SeqNo: Integer; const GroupName: string; const Barcode: string);
     procedure AddKr(const Item: TOptimizedItem);
     procedure SaveToFile(const FileName: string);
   end;
@@ -34,13 +34,13 @@ type
     FLines: TStringList;
     function PadLeftNum(const Value: Int64; const Width: Integer): string;
     function PadRightText(const Value: string; const Width: Integer): string;
-    function BlockLenForCount(const Count: Integer): Integer;
-    function BuildBlocksLine(const Blocks: array of string): string;
+    function LimitText(const Value: string): string;
   public
     constructor Create;
     destructor Destroy; override;
-    procedure AddEdnt(const SeqNo: Integer; const Blocks: array of string);
-    procedure AddEdnr(const SeqNo: Integer; const Blocks: array of string);
+    procedure AddEdntLine(const SeqNo: Integer; const TextLine: string);
+    procedure AddEdnr(const SeqNo: Integer; const OstatMm: Double;
+      const TextLine: string);
     procedure SaveToFile(const FileName: string);
   end;
 
@@ -168,7 +168,7 @@ begin
 end;
 
 procedure TSturtzSobBuilder.AddKt(const Detail: TOptimizedDetail; const Item: TOptimizedItem;
-  const SeqNo: Integer; const GroupName: string);
+  const SeqNo: Integer; const GroupName: string; const Barcode: string);
 var
   OrderCode: string;
   ElementCode: Integer;
@@ -197,7 +197,7 @@ begin
     'D' + PadLeftNum(1, 1) +
     'S' + PadLeftNum(0, 1) +
     'W' + PadLeftNum(0, 1) +
-    'I' + PadRightText('', 25) +
+    'I' + PadRightText(CyrillicToLatin(Barcode), 25) +
     'Z' + PadRightText('', 30)
   );
 end;
@@ -246,45 +246,29 @@ begin
   Result := S + StringOfChar(' ', Width - Length(S));
 end;
 
-function TSturtzSoeBuilder.BlockLenForCount(const Count: Integer): Integer;
+function TSturtzSoeBuilder.LimitText(const Value: string): string;
 begin
-  case Count of
-    1: Result := 84;
-    2: Result := 41;
-    3: Result := 27;
-    4: Result := 20;
-  else
-    Result := 84;
-  end;
+  Result := CyrillicToLatin(Value);
+  if Length(Result) > 84 then
+    Result := Copy(Result, 1, 84);
 end;
 
-function TSturtzSoeBuilder.BuildBlocksLine(const Blocks: array of string): string;
+procedure TSturtzSoeBuilder.AddEdntLine(const SeqNo: Integer; const TextLine: string);
+begin
+  FLines.Add('EDNT' + PadLeftNum(SeqNo, 4) + 'T' + LimitText(TextLine));
+end;
+
+procedure TSturtzSoeBuilder.AddEdnr(const SeqNo: Integer; const OstatMm: Double;
+  const TextLine: string);
 var
-  I: Integer;
-  BlockLen: Integer;
-  Part: string;
+  OstatTenthMm: Int64;
 begin
-  Result := '';
-  if Length(Blocks) = 0 then
-    Exit;
-  BlockLen := BlockLenForCount(Length(Blocks));
-  for I := 0 to High(Blocks) do
-  begin
-    Part := PadRightText(CyrillicToLatin(Blocks[I]), BlockLen);
-    if I > 0 then
-      Result := Result + '#';
-    Result := Result + Part;
-  end;
-end;
-
-procedure TSturtzSoeBuilder.AddEdnt(const SeqNo: Integer; const Blocks: array of string);
-begin
-  FLines.Add('EDNT' + PadLeftNum(SeqNo, 4) + 'T' + BuildBlocksLine(Blocks));
-end;
-
-procedure TSturtzSoeBuilder.AddEdnr(const SeqNo: Integer; const Blocks: array of string);
-begin
-  FLines.Add('EDNR' + PadLeftNum(SeqNo, 3) + 'T' + BuildBlocksLine(Blocks));
+  OstatTenthMm := Round(OstatMm * 10);
+  FLines.Add(
+    'EDNR' + PadLeftNum(SeqNo, 3) +
+    'T' + PadLeftNum(OstatTenthMm, 5) + '#' +
+    PadRightText(LimitText(TextLine), 14)
+  );
 end;
 
 procedure TSturtzSoeBuilder.SaveToFile(const FileName: string);

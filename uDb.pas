@@ -18,6 +18,9 @@ type
     FDb: TIBDatabase;
     FTrans: TIBTransaction;
     FSql: TIBSQL;
+    function GetPartWindowIdByTag(const ShortTag, ItemName: string): Integer;
+    function GetReinforcementCodes(const PartWindRepId, PositionId,
+      WindowId: Integer): string;
   public
     constructor Create;
     destructor Destroy; override;
@@ -182,6 +185,177 @@ begin
   Result := FDb.Connected;
 end;
 
+function TDbManager.GetPartWindowIdByTag(const ShortTag, ItemName: string): Integer;
+var
+  Q: TIBSQL;
+  Pattern: string;
+  Tag: string;
+begin
+  Result := -1;
+  Tag := Trim(ShortTag);
+  if SameText(Tag, 'Р') then
+    Pattern := 'Рама'
+  else if SameText(Tag, 'C') or SameText(Tag, 'С') then
+    Pattern := 'Створка'
+  else if SameText(Tag, 'Иг') or SameText(Tag, 'Ив') then
+    Pattern := 'Импост'
+  else if SameText(Tag, 'Ш') then
+    Pattern := 'Штульп'
+  else if SameText(Tag, 'Прг') then
+    Pattern := 'Порог'
+  else if SameText(Tag, 'Ц') then
+    Pattern := 'Цоколь'
+  else if Pos('Рама', ItemName) > 0 then
+    Pattern := 'Рама'
+  else if Pos('Створка', ItemName) > 0 then
+    Pattern := 'Створка'
+  else if Pos('Импост', ItemName) > 0 then
+    Pattern := 'Импост'
+  else if Pos('Штульп', ItemName) > 0 then
+    Pattern := 'Штульп'
+  else if Pos('Порог', ItemName) > 0 then
+    Pattern := 'Порог'
+  else if Pos('Цоколь', ItemName) > 0 then
+    Pattern := 'Цоколь'
+  else
+    Pattern := '';
+
+  if Pattern = '' then
+    Exit;
+
+  Q := TIBSQL.Create(nil);
+  try
+    Q.Database := FDb;
+    Q.Transaction := FTrans;
+    Q.SQL.Text :=
+      'select first 1 rp.PARTWINDOWID ' +
+      'from R_PARTWINDOW rp ' +
+      'where rp.PW_NAME containing :P ' +
+      'order by rp.PARTWINDOWID';
+    Q.ParamByName('P').AsString := Pattern;
+    Q.ExecQuery;
+    if not Q.Eof then
+      Result := Q.FieldByName('PARTWINDOWID').AsInteger;
+    Q.Close;
+  finally
+    Q.Free;
+  end;
+end;
+
+function TDbManager.GetReinforcementCodes(const PartWindRepId, PositionId,
+  WindowId: Integer): string;
+var
+  Q: TIBSQL;
+  ProfileArticulId: Integer;
+  ShortTag: string;
+  ItemName: string;
+  PartWindowId: Integer;
+  PratPartId: Integer;
+  RsTypes: TStringList;
+  InClause: string;
+  I: Integer;
+begin
+  Result := '';
+  ProfileArticulId := 0;
+  ShortTag := '';
+  ItemName := '';
+  PartWindowId := -1;
+  PratPartId := 0;
+
+  Q := TIBSQL.Create(nil);
+  RsTypes := TStringList.Create;
+  try
+    Q.Database := FDb;
+    Q.Transaction := FTrans;
+
+    Q.SQL.Text :=
+      'select first 1 w.ARTICULID, r.SHORTTAG, r.ITEMNAME ' +
+      'from WINPROFILES w ' +
+      'join VIRTARTICULES va on va.ARTICULID = w.ARTICULID ' +
+      'join VIRTARTTYPES vt on vt.VIRTARTTYPEID = va.VIRTARTTYPEID ' +
+      'left join PARTWINDOWREP r on r.PARTWINDREPID = w.PARTWINDREPID ' +
+      'where w.PARTWINDREPID = :PARTWINDREPID ' +
+      '  and w.POSITIONID = :POSITIONID ' +
+      '  and w.WINDOWID = :WINDOWID ' +
+      '  and vt.DESCRIPTION = ''Профили''';
+    Q.ParamByName('PARTWINDREPID').AsInteger := PartWindRepId;
+    Q.ParamByName('POSITIONID').AsInteger := PositionId;
+    Q.ParamByName('WINDOWID').AsInteger := WindowId;
+    Q.ExecQuery;
+    if Q.Eof then
+      Exit;
+    ProfileArticulId := Q.FieldByName('ARTICULID').AsInteger;
+    if not Q.FieldByName('SHORTTAG').IsNull then
+      ShortTag := Q.FieldByName('SHORTTAG').AsString;
+    if not Q.FieldByName('ITEMNAME').IsNull then
+      ItemName := Q.FieldByName('ITEMNAME').AsString;
+    Q.Close;
+
+    PartWindowId := GetPartWindowIdByTag(ShortTag, ItemName);
+    if PartWindowId <= 0 then
+      Exit;
+
+    Q.SQL.Text :=
+      'select first 1 PRATPARTID ' +
+      'from PROFATPARTS ' +
+      'where PARTWINDOWID = :PARTWINDOWID ' +
+      '  and PROFPARTID = :PROFPARTID';
+    Q.ParamByName('PARTWINDOWID').AsInteger := PartWindowId;
+    Q.ParamByName('PROFPARTID').AsInteger := ProfileArticulId;
+    Q.ExecQuery;
+    if Q.Eof then
+      Exit;
+    PratPartId := Q.FieldByName('PRATPARTID').AsInteger;
+    Q.Close;
+
+    Q.SQL.Text :=
+      'select RS_TYP ' +
+      'from LINK_PARTS_STAL ' +
+      'where PARTWINDOWID = :PARTWINDOWID';
+    Q.ParamByName('PARTWINDOWID').AsInteger := PartWindowId;
+    Q.ExecQuery;
+    while not Q.Eof do
+    begin
+      RsTypes.Add(IntToStr(Q.FieldByName('RS_TYP').AsInteger));
+      Q.Next;
+    end;
+    Q.Close;
+
+    if RsTypes.Count = 0 then
+      Exit;
+
+    InClause := '';
+    for I := 0 to RsTypes.Count - 1 do
+    begin
+      if I > 0 then
+        InClause := InClause + ',';
+      InClause := InClause + RsTypes[I];
+    end;
+
+    Q.SQL.Text :=
+      'select distinct va.AR_ART ' +
+      'from PROF_STAL ps ' +
+      'join VIRTARTICULES va on va.ARTICULID = ps.RS_ID ' +
+      'where ps.PRATPARTID = :PRATPARTID ' +
+      '  and ps.DELETED = 0 ' +
+      '  and ps.RS_TYP in (' + InClause + ') ' +
+      'order by va.AR_ART';
+    Q.ParamByName('PRATPARTID').AsInteger := PratPartId;
+    Q.ExecQuery;
+    while not Q.Eof do
+    begin
+      if Result <> '' then
+        Result := Result + ',';
+      Result := Result + Trim(Q.FieldByName('AR_ART').AsString);
+      Q.Next;
+    end;
+    Q.Close;
+  finally
+    RsTypes.Free;
+    Q.Free;
+  end;
+end;
+
 function TDbManager.GetGroupOrders: TArray<TGroupOrder>;
 var
   Items: TArray<TGroupOrder>;
@@ -324,12 +498,14 @@ begin
 
   FSql.Close;
   FSql.SQL.Text :=
-    'select d.OD_ID, d.OPTIMIZEDID, d.OD_PARTNO, d.OD_LONG, d.OD_QTY, ' +
-    'd.OD_UG1, d.OD_UG2, d.OD_ORDERID, d.OD_WINDOWID, d.OD_NUM, d.OD_SUBNUM, ' +
+    'select d.OD_ID, d.OPTIMIZEDID, d.PARTWINDREPID, d.POSITIONID, d.OD_PARTNO, d.OD_LONG, d.OD_LONG_AL, d.OD_QTY, ' +
+    'd.OD_UG1, d.OD_UG2, d.OD_ORDERID, ord.ORDNO as ORDER_NO, d.OD_WINDOWID, win.WN_WIDTH, win.WN_HEIGHT, d.OD_NUM, d.OD_SUBNUM, ' +
     'p.SHORTNAME as POSITION_SHORTNAME, ' +
     'r.SHORTTAG as PART_SHORTTAG ' +
     'from OPT_DETAIL d ' +
     'join OPTIMIZED o on o.OPTIMIZEDID = d.OPTIMIZEDID ' +
+    'left join ORDERS ord on ord.ORDERID = d.OD_ORDERID ' +
+    'left join WINDOWS win on win.WINDOWID = d.OD_WINDOWID ' +
     'left join POSITIONS p on p.POSITIONID = d.POSITIONID ' +
     'left join ( ' +
     '  select w.* ' +
@@ -355,13 +531,28 @@ begin
   begin
     Item.DetailId := FSql.FieldByName('OD_ID').AsInteger;
     Item.OptimizedId := FSql.FieldByName('OPTIMIZEDID').AsInteger;
+    Item.PartWindRepId := FSql.FieldByName('PARTWINDREPID').AsInteger;
+    Item.PositionId := FSql.FieldByName('POSITIONID').AsInteger;
     Item.PartNo := FSql.FieldByName('OD_PARTNO').AsInteger;
     Item.Length := FSql.FieldByName('OD_LONG').AsFloat;
+    Item.ArmLength := FSql.FieldByName('OD_LONG_AL').AsFloat;
     Item.Qty := FSql.FieldByName('OD_QTY').AsInteger;
     Item.Ug1 := FSql.FieldByName('OD_UG1').AsFloat;
     Item.Ug2 := FSql.FieldByName('OD_UG2').AsFloat;
     Item.OrderId := FSql.FieldByName('OD_ORDERID').AsInteger;
+    if not FSql.FieldByName('ORDER_NO').IsNull then
+      Item.OrderNo := Trim(FSql.FieldByName('ORDER_NO').AsString)
+    else
+      Item.OrderNo := '';
     Item.WindowId := FSql.FieldByName('OD_WINDOWID').AsInteger;
+    if not FSql.FieldByName('WN_WIDTH').IsNull then
+      Item.WindowWidth := FSql.FieldByName('WN_WIDTH').AsFloat
+    else
+      Item.WindowWidth := 0;
+    if not FSql.FieldByName('WN_HEIGHT').IsNull then
+      Item.WindowHeight := FSql.FieldByName('WN_HEIGHT').AsFloat
+    else
+      Item.WindowHeight := 0;
     Item.Num := FSql.FieldByName('OD_NUM').AsInteger;
     Item.SubNum := FSql.FieldByName('OD_SUBNUM').AsInteger;
     if not FSql.FieldByName('POSITION_SHORTNAME').IsNull then
@@ -372,6 +563,8 @@ begin
       Item.PartShortTag := FSql.FieldByName('PART_SHORTTAG').AsString
     else
       Item.PartShortTag := '';
+    Item.ReinforcementCodes := GetReinforcementCodes(Item.PartWindRepId,
+      Item.PositionId, Item.WindowId);
     SetLength(Items, Count + 1);
     Items[Count] := Item;
     Inc(Count);

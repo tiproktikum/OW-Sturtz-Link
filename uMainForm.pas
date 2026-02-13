@@ -366,27 +366,32 @@ var
   SoeFileName: string;
   Builder: TSturtzSobBuilder;
   SoeBuilder: TSturtzSoeBuilder;
-  ItemByOptimizedId: TDictionary<Integer, TOptimizedItem>;
-  KsSeqsByOptimizedId: TDictionary<Integer, TList<Integer>>;
-  KtSeqByDetailId: TDictionary<Integer, Integer>;
   DetailsByOptimizedId: TDictionary<Integer, TList<TOptimizedDetail>>;
   ProfileCodeMap: TDictionary<string, string>;
   OptimizedItems: TArray<TOptimizedItem>;
   OptimizedDetails: TArray<TOptimizedDetail>;
   Item: TOptimizedItem;
   MappedItem: TOptimizedItem;
-  ItemForDetail: TOptimizedItem;
   Detail: TOptimizedDetail;
   DetailList: TList<TOptimizedDetail>;
-  KsSeqs: TList<Integer>;
   BarIndex: Integer;
   BarCount: Integer;
   SeqKs: Integer;
   SeqKt: Integer;
-  KtSeq: Integer;
-  KsSeq: Integer;
-  ColorText: string;
   ProfileCode: string;
+  GroupCode: string;
+  GroupSuffix: string;
+  OrderLabel: string;
+  PositionCode: string;
+  Barcode: string;
+  Marker: string;
+  ArmLen: Integer;
+  WidthMm: Integer;
+  HeightMm: Integer;
+  EdnrSeq: Integer;
+  I: Integer;
+  C: Char;
+  Tag: string;
 begin
   if not FDb.IsConnected then
     raise Exception.Create('Сначала подключитесь к БД.');
@@ -415,13 +420,22 @@ begin
 
   Builder := TSturtzSobBuilder.Create;
   SoeBuilder := TSturtzSoeBuilder.Create;
-  ItemByOptimizedId := TDictionary<Integer, TOptimizedItem>.Create;
-  KsSeqsByOptimizedId := TDictionary<Integer, TList<Integer>>.Create;
-  KtSeqByDetailId := TDictionary<Integer, Integer>.Create;
   DetailsByOptimizedId := TDictionary<Integer, TList<TOptimizedDetail>>.Create;
   ProfileCodeMap := LoadProfileCodeMap;
   try
     Builder.AddVerHeader('02.07');
+    GroupCode := CyrillicToLatin(Group.Name);
+    GroupSuffix := '1';
+    for I := 1 to Length(GroupCode) do
+    begin
+      C := GroupCode[I];
+      if CharInSet(C, ['0'..'9']) then
+      begin
+        GroupSuffix := C;
+        Break;
+      end;
+    end;
+
     SeqKs := 1;
     SeqKt := 1;
     for Detail in OptimizedDetails do
@@ -435,7 +449,6 @@ begin
     end;
     for Item in OptimizedItems do
     begin
-      ItemByOptimizedId.AddOrSetValue(Item.OptimizedId, Item);
       MappedItem := Item;
       MappedItem.Articul := MapProfileCode(Item.Articul, ProfileCodeMap);
       if Item.Qty > 0 then
@@ -445,82 +458,76 @@ begin
       for BarIndex := 1 to BarCount do
       begin
         Builder.AddKs(MappedItem, SeqKs);
-        if not KsSeqsByOptimizedId.TryGetValue(Item.OptimizedId, KsSeqs) then
-        begin
-          KsSeqs := TList<Integer>.Create;
-          KsSeqsByOptimizedId.Add(Item.OptimizedId, KsSeqs);
-        end;
-        KsSeqs.Add(SeqKs);
-        Inc(SeqKs);
+
         if DetailsByOptimizedId.TryGetValue(Item.OptimizedId, DetailList) then
           for Detail in DetailList do
             if (Detail.Num = BarIndex) or ((BarCount = 1) and (Detail.Num = 0)) then
             begin
               if Detail.Length < MinPartLengthMm then
                 Continue;
-              Builder.AddKt(Detail, MappedItem, SeqKt, Group.Name);
-              KtSeqByDetailId.AddOrSetValue(Detail.DetailId, SeqKt);
+
+              Barcode := 'OD' + IntToStr(Detail.DetailId);
+              Builder.AddKt(Detail, MappedItem, SeqKt, Group.Name, Barcode);
+
+              ProfileCode := MapProfileCode(MappedItem.Articul, ProfileCodeMap);
+              ArmLen := Round(Detail.ArmLength);
+              if ArmLen <= 0 then
+                ArmLen := Round(Detail.Length);
+              PositionCode := Trim(CyrillicToLatin(Detail.PositionTag));
+              if PositionCode <> '' then
+                PositionCode := UpperCase(Copy(PositionCode, 1, 1))
+              else
+                PositionCode := '-';
+              if Detail.OrderNo <> '' then
+                OrderLabel := Detail.OrderNo
+              else
+                OrderLabel := IntToStr(Detail.OrderId);
+              OrderLabel := OrderLabel + '-' + GroupSuffix;
+              WidthMm := Round(Detail.WindowWidth);
+              HeightMm := Round(Detail.WindowHeight);
+
+              Tag := Trim(Detail.PartShortTag);
+              if SameText(Tag, 'Иг') or SameText(Tag, 'Ив') or
+                SameText(Tag, 'Ш') or SameText(Tag, 'C') or SameText(Tag, 'С') then
+                Marker := 'v'
+              else
+                Marker := '^';
+
+              SoeBuilder.AddEdntLine(SeqKt,
+                Format('%-14s - %d  TITAN  %s', [ProfileCode, Round(Detail.Length), GroupCode]));
+              SoeBuilder.AddEdntLine(SeqKt, '                Arm=' + IntToStr(ArmLen));
+              SoeBuilder.AddEdntLine(SeqKt, '-');
+              SoeBuilder.AddEdntLine(SeqKt, 'Order' + OrderLabel + ' ' + PositionCode);
+              if (WidthMm > 0) and (HeightMm > 0) then
+                SoeBuilder.AddEdntLine(SeqKt,
+                  IntToStr(WidthMm) + 'x' + IntToStr(HeightMm) + '  -  ' + Marker)
+              else
+                SoeBuilder.AddEdntLine(SeqKt, '-  -  ' + Marker);
+              SoeBuilder.AddEdntLine(SeqKt, 'Order' + OrderLabel + '.pcx');
+
               Inc(SeqKt);
             end;
+
         if Item.Ostat > 0 then
+        begin
           Builder.AddKr(MappedItem);
+          EdnrSeq := SeqKs - 1; // в эталонах EDNR нумеруется с 0
+          if EdnrSeq < 0 then
+            EdnrSeq := 0;
+          SoeBuilder.AddEdnr(EdnrSeq, Item.Ostat, MappedItem.Articul);
+        end;
+
+        Inc(SeqKs);
       end;
     end;
     Builder.SaveToFile(FileName);
-    for Detail in OptimizedDetails do
-    begin
-      if not KtSeqByDetailId.TryGetValue(Detail.DetailId, KtSeq) then
-        Continue;
-      if not ItemByOptimizedId.TryGetValue(Detail.OptimizedId, ItemForDetail) then
-        Continue;
-      SoeBuilder.AddEdnt(KtSeq, [
-        'TAB-NO:' + IntToStr(Detail.OrderId),
-        'IZDEL-NO:' + IntToStr(Detail.PartNo)
-      ]);
-      SoeBuilder.AddEdnt(KtSeq, [
-        'ZAKAZCHIK:' + Group.Name,
-        'KOM:' + IntToStr(Group.Id)
-      ]);
-      SoeBuilder.AddEdnt(KtSeq, [
-        'NA POZ.:' + IntToStr(Detail.PartNo),
-        'POLOZHENIE:',
-        'POZ.:' + IntToStr(Detail.PartNo)
-      ]);
-      ProfileCode := MapProfileCode(ItemForDetail.Articul, ProfileCodeMap);
-      SoeBuilder.AddEdnt(KtSeq, [
-        'PROFIL:' + ProfileCode,
-        'DLINA:' + IntToStr(Round(Detail.Length))
-      ]);
-    end;
-    for Item in OptimizedItems do
-      if Item.Ostat > 0 then
-      begin
-        if not KsSeqsByOptimizedId.TryGetValue(Item.OptimizedId, KsSeqs) then
-          Continue;
-        for KsSeq in KsSeqs do
-        begin
-          SoeBuilder.AddEdnr(KsSeq, ['OSTATOK']);
-          ProfileCode := MapProfileCode(Item.Articul, ProfileCodeMap);
-          SoeBuilder.AddEdnr(KsSeq, ['PROFIL:' + ProfileCode]);
-          ColorText := Item.OutColor;
-          if ColorText = '' then
-            ColorText := '-';
-          SoeBuilder.AddEdnr(KsSeq, ['CVET:' + ColorText]);
-          SoeBuilder.AddEdnr(KsSeq, ['DLINA:' + IntToStr(Round(Item.Ostat)) + ' MM']);
-        end;
-      end;
     SoeBuilder.SaveToFile(SoeFileName);
   finally
     Builder.Free;
     SoeBuilder.Free;
-    ItemByOptimizedId.Free;
-    KtSeqByDetailId.Free;
     for DetailList in DetailsByOptimizedId.Values do
       DetailList.Free;
     DetailsByOptimizedId.Free;
-    for KsSeqs in KsSeqsByOptimizedId.Values do
-      KsSeqs.Free;
-    KsSeqsByOptimizedId.Free;
     ProfileCodeMap.Free;
   end;
 

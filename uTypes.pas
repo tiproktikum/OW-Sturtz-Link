@@ -30,17 +30,24 @@ type
   TOptimizedDetail = record
     DetailId: Integer;
     OptimizedId: Integer;
+    PartWindRepId: Integer;
+    PositionId: Integer;
     PartNo: Integer;
     Length: Double;
+    ArmLength: Double;
     Qty: Integer;
     Ug1: Double;
     Ug2: Double;
     OrderId: Integer;
+    OrderNo: string;
     WindowId: Integer;
+    WindowWidth: Double;
+    WindowHeight: Double;
     Num: Integer;
     SubNum: Integer;
     PositionTag: string;
     PartShortTag: string;
+    ReinforcementCodes: string;
   end;
 
   TGroupOrderRef = class
