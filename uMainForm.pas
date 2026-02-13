@@ -92,6 +92,7 @@ const
   ColId = 2;
   ColElementCount = 3;
   ProfileCodeMapFileName = 'optima_sturtz_profile_code_mapping.csv';
+  MinPartLengthMm = 358.0;  // минимальная длина детали для станка; короче — не выгружаем и этикетку не печатаем
 
 {$R *.dfm}
 
@@ -455,6 +456,8 @@ begin
           for Detail in DetailList do
             if (Detail.Num = BarIndex) or ((BarCount = 1) and (Detail.Num = 0)) then
             begin
+              if Detail.Length < MinPartLengthMm then
+                Continue;
               Builder.AddKt(Detail, MappedItem, SeqKt, Group.Name);
               KtSeqByDetailId.AddOrSetValue(Detail.DetailId, SeqKt);
               Inc(SeqKt);
